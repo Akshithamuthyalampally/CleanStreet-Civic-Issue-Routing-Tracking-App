@@ -11,6 +11,7 @@ const issueSchema = new mongoose.Schema({
     longitude: { type: Number, required: true },
     urgency: { type: String, enum: ['Low', 'Medium', 'High'], default: 'Low' },
     status: { type: String, enum: ['Pending', 'In Progress', 'Resolved'], default: 'Pending' },
+    assignedVolunteer: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     images: [{ type: String }], // Array of image URLs/paths
     upvotes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     downvotes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],

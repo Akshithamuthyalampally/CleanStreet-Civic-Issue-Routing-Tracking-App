@@ -1,81 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import L from 'leaflet'
 import api from '../api/axios'
 import { useAuth } from '../context/AuthContext'
+import { statusBadge, ManualMap, DetailModal } from '../components/SharedComponents'
 
-// Leaflet Icons
-const MARKER_ICON_2X = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png';
-const MARKER_ICON = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png';
-const MARKER_SHADOW = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png';
-
-const statusBadge = (status) => {
-    const s = status?.toLowerCase();
-    switch (s) {
-        case 'resolved':
-            return 'bg-green-500 text-white border-green-600';
-        case 'in progress':
-            return 'bg-blue-500 text-white border-blue-600';
-        case 'pending':
-            return 'bg-orange-500 text-white border-orange-600';
-        default:
-            return 'bg-zinc-500 text-white border-zinc-600';
-    }
-}
-
-const ManualMap = ({ center, markerPos }) => {
-    const mapContainerRef = useRef(null);
-    const mapInstanceRef = useRef(null);
-    const markerRef = useRef(null);
-
-    useEffect(() => {
-        if (!mapContainerRef.current || mapInstanceRef.current) return;
-
-        const map = L.map(mapContainerRef.current, {
-            center: center,
-            zoom: 15,
-            scrollWheelZoom: false,
-            zoomControl: true,
-        });
-
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap'
-        }).addTo(map);
-
-        mapInstanceRef.current = map;
-
-        return () => {
-            if (mapInstanceRef.current) {
-                mapInstanceRef.current.remove();
-                mapInstanceRef.current = null;
-            }
-        };
-    }, []);
-
-    useEffect(() => {
-        const map = mapInstanceRef.current;
-        if (!map) return;
-
-        map.setView(center, 15);
-
-        if (markerRef.current) {
-            markerRef.current.setLatLng(markerPos);
-        } else {
-            const customIcon = L.icon({
-                iconUrl: MARKER_ICON,
-                iconRetinaUrl: MARKER_ICON_2X,
-                shadowUrl: MARKER_SHADOW,
-                iconSize: [25, 41],
-                iconAnchor: [12, 41],
-                popupAnchor: [1, -34],
-                shadowSize: [41, 41]
-            });
-            markerRef.current = L.marker(markerPos, { icon: customIcon }).addTo(map);
-        }
-    }, [center, markerPos]);
-
-    return <div ref={mapContainerRef} className="w-full h-full rounded-lg ring-1 ring-black/5" />;
-};
+// statusBadge and ManualMap moved to SharedComponents
 
 const ThumbsUp = ({ active }) => (
     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M7 10v12" /><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88Z" /></svg>
@@ -93,7 +22,7 @@ const ImageCarousel = ({ images, title }) => {
     const [currentIndex, setCurrentIndex] = useState(0);
 
     useEffect(() => {
-        if (images.length <= 1) return;
+        if (!images || images.length <= 1) return;
         const interval = setInterval(() => {
             setCurrentIndex(prev => (prev + 1) % images.length);
         }, 3000);
@@ -149,7 +78,7 @@ const ImageCarousel = ({ images, title }) => {
     );
 };
 
-const ComplaintCard = ({ complaint, onClick, onDelete, onUpdate, currentUser }) => {
+const ComplaintCard = ({ complaint, onClick, onDelete, onUpdate, currentUser, onAction }) => {
     const [showComments, setShowComments] = useState(false);
     const [commentText, setCommentText] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -216,7 +145,7 @@ const ComplaintCard = ({ complaint, onClick, onDelete, onUpdate, currentUser }) 
                     <span className="line-clamp-1">{complaint.fullAddress}</span>
                 </div>
 
-                <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+                <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-y-4">
                     <div className="flex gap-2">
                         <button
                             className={`flex items-center gap-2 px-4 py-2 rounded-xl border transition-all ${hasUpvoted
@@ -255,16 +184,58 @@ const ComplaintCard = ({ complaint, onClick, onDelete, onUpdate, currentUser }) 
                             <span className="text-xs font-black">{complaint.comments?.length || 0}</span>
                         </button>
                     </div>
-                    {isOwner && (
-                        <button
-                            onClick={e => {
-                                e.stopPropagation();
-                                onDelete(complaint);
-                            }}
-                            className="text-[10px] font-black uppercase tracking-widest text-red-500 hover:scale-105 transition-transform"
-                        >
-                            Purge
-                        </button>
+                    {(isOwner || currentUser?.role === 'volunteer') && (
+                        <div className="flex flex-col items-end gap-2">
+                            {currentUser?.role === 'volunteer' && (
+                                <div className="flex gap-3 items-center">
+                                    {!complaint.assignedVolunteer ? (
+                                        <button
+                                            onClick={e => {
+                                                e.stopPropagation();
+                                                onAction(complaint._id, 'accept');
+                                            }}
+                                            className="text-[10px] font-black uppercase tracking-widest text-blue-500 hover:scale-105 transition-transform bg-blue-500/10 px-3 py-1 rounded-lg border border-blue-500/20"
+                                        >
+                                            Accept Mission
+                                        </button>
+                                    ) : (complaint.assignedVolunteer?._id === (currentUser?.id || currentUser?._id) || complaint.assignedVolunteer === (currentUser?.id || currentUser?._id)) ? (
+                                        <>
+                                            <button
+                                                onClick={e => {
+                                                    e.stopPropagation();
+                                                    onAction(complaint._id, 'reject');
+                                                }}
+                                                className="text-[10px] font-black uppercase tracking-widest text-orange-500 hover:scale-105 transition-transform bg-orange-500/10 px-3 py-1 rounded-lg border border-orange-500/20"
+                                            >
+                                                Reject
+                                            </button>
+                                            <button
+                                                onClick={e => {
+                                                    e.stopPropagation();
+                                                    onClick(complaint, 'status');
+                                                }}
+                                                className="text-[10px] font-black uppercase tracking-widest text-civic-green hover:scale-105 transition-transform bg-civic-green/10 px-3 py-1 rounded-lg border border-civic-green/20"
+                                            >
+                                                Update Status
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <span className="text-[9px] font-bold opacity-30 uppercase tracking-widest bg-zinc-100 dark:bg-zinc-800 px-3 py-1 rounded-lg">Occupied</span>
+                                    )}
+                                </div>
+                            )}
+                            {isOwner && (
+                                <button
+                                    onClick={e => {
+                                        e.stopPropagation();
+                                        onDelete(complaint);
+                                    }}
+                                    className="text-[10px] font-black uppercase tracking-widest text-red-500 hover:scale-105 transition-transform bg-red-500/10 px-3 py-1 rounded-lg border border-red-500/20 self-end"
+                                >
+                                    Purge Record
+                                </button>
+                            )}
+                        </div>
                     )}
                 </div>
             </div>
@@ -324,442 +295,11 @@ const ComplaintCard = ({ complaint, onClick, onDelete, onUpdate, currentUser }) 
                     </motion.div>
                 )}
             </AnimatePresence>
-        </motion.div>
+        </motion.div >
     );
 }
 
-const DetailModal = ({ complaint, onClose, onUpdate, onDelete, initialDeleteMode = false }) => {
-    const { user } = useAuth();
-    const [isEditing, setIsEditing] = useState(false);
-    const [editForm, setEditForm] = useState({
-        status: 'Pending',
-        ...complaint
-    });
-    const [existingImages, setExistingImages] = useState(complaint.images || []);
-
-    useEffect(() => {
-        setEditForm({ status: 'Pending', ...complaint });
-        setExistingImages(complaint.images || []);
-    }, [complaint]);
-    const [newPhotos, setNewPhotos] = useState([]);
-    const [loading, setLoading] = useState(false);
-    const [deleteConfirm, setDeleteConfirm] = useState(initialDeleteMode);
-
-    if (!complaint) return null;
-
-    const isOwner = user && (
-        (user.id || user._id) === complaint.userId ||
-        (user.id || user._id) === (complaint.userId?._id || complaint.userId)
-    );
-
-    const handleUpdate = async () => {
-        setLoading(true);
-        try {
-            const formData = new FormData();
-            formData.append('title', editForm.title);
-            formData.append('description', editForm.description);
-            formData.append('category', editForm.category);
-            formData.append('urgency', editForm.urgency);
-            formData.append('status', editForm.status);
-
-            existingImages.forEach(img => formData.append('existingImages', img));
-            newPhotos.forEach(file => formData.append('images', file));
-
-            const { data } = await api.put(`/issues/${complaint._id}`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
-
-            onUpdate({ ...data.issue, userName: complaint.userName });
-            setIsEditing(false);
-            setNewPhotos([]);
-        } catch (err) {
-            console.error('Update failed', err);
-        } finally {
-            setLoading(false);
-        }
-    }
-
-    const [currentMainImage, setCurrentMainImage] = useState(null);
-
-    const handleAddPhotos = (e) => {
-        const files = Array.from(e.target.files);
-        setNewPhotos(prev => [...prev, ...files]);
-        if (files.length > 0) {
-            setCurrentMainImage(URL.createObjectURL(files[0]));
-        }
-    };
-
-    const removeExistingImage = (index) => {
-        setExistingImages(prev => prev.filter((_, i) => i !== index));
-        if (currentMainImage === existingImages[index]) setCurrentMainImage(null);
-    };
-
-    const removeNewPhoto = (index) => {
-        const photoUrl = URL.createObjectURL(newPhotos[index]);
-        setNewPhotos(prev => prev.filter((_, i) => i !== index));
-        if (currentMainImage === photoUrl) setCurrentMainImage(null);
-    };
-
-    const handleDelete = async () => {
-        setLoading(true);
-        try {
-            await api.delete(`/issues/${complaint._id}`);
-            onDelete(complaint._id);
-            onClose();
-        } catch (err) {
-            console.error('Delete failed', err);
-        } finally {
-            setLoading(false);
-        }
-    }
-
-    const allImages = [...existingImages, ...newPhotos.map(p => URL.createObjectURL(p))];
-    const mainView = currentMainImage || allImages[0];
-
-    return (
-        <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-            onClick={onClose}
-        >
-            <motion.div
-                layoutId={complaint._id}
-                className="bg-white dark:bg-[#1a1c1e] w-full max-w-5xl max-h-[90vh] rounded-3xl overflow-hidden shadow-2xl flex flex-col"
-                onClick={e => e.stopPropagation()}
-            >
-                <div className="p-6 border-b flex justify-between items-center" style={{ borderColor: 'var(--card-border)' }}>
-                    <div className="flex-1">
-                        {isEditing ? (
-                            <input
-                                className="text-2xl font-black tracking-tight bg-transparent border-b border-civic-green w-full focus:outline-none"
-                                value={editForm.title}
-                                onChange={e => setEditForm({ ...editForm, title: e.target.value })}
-                                style={{ color: 'var(--text-color)' }}
-                            />
-                        ) : (
-                            <h2 className="text-2xl font-black tracking-tight" style={{ color: 'var(--text-color)' }}>{complaint.title}</h2>
-                        )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                        {isOwner && (
-                            <>
-                                {isEditing ? (
-                                    <>
-                                        <button
-                                            onClick={handleUpdate}
-                                            disabled={loading}
-                                            className="px-6 py-2 bg-civic-green text-black rounded-xl text-xs font-black uppercase tracking-widest shadow-neon hover:scale-105 transition-all"
-                                        >
-                                            {loading ? 'Saving...' : 'Save'}
-                                        </button>
-                                        <button
-                                            onClick={() => {
-                                                setIsEditing(false);
-                                                setExistingImages(complaint.images || []);
-                                                setNewPhotos([]);
-                                                setCurrentMainImage(null);
-                                            }}
-                                            className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest bg-gray-100 dark:bg-white/5"
-                                        >
-                                            Cancel
-                                        </button>
-                                    </>
-                                ) : (
-                                    <>
-                                        <button
-                                            onClick={() => setIsEditing(true)}
-                                            className="px-4 py-2 bg-civic-green/10 text-civic-green border border-civic-green/20 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-civic-green hover:text-black transition-all"
-                                        >
-                                            Edit
-                                        </button>
-                                        <button
-                                            onClick={() => setDeleteConfirm(true)}
-                                            className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest text-red-500 bg-red-500/10 border border-red-500/20 hover:bg-red-500 hover:text-white transition-all"
-                                        >
-                                            Delete
-                                        </button>
-                                    </>
-                                )}
-                            </>
-                        )}
-                        <button onClick={onClose} className="p-2 hover:bg-black/5 rounded-full transition-all text-2xl">×</button>
-                    </div>
-                </div>
-
-                <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-                    {deleteConfirm ? (
-                        <div className="h-full flex flex-col items-center justify-center text-center py-8 sm:py-12">
-                            <div className="text-5xl sm:text-6xl mb-6">🗑️</div>
-                            <h3 className="text-xl sm:text-2xl font-black mb-2" style={{ color: 'var(--text-color)' }}>Purge Complaint?</h3>
-                            <p className="text-sm opacity-60 mb-8 max-w-sm px-4">This action is irreversible. The submission will be permanently removed from the civic registry.</p>
-                            <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto px-4">
-                                <button
-                                    onClick={() => setDeleteConfirm(false)}
-                                    className="flex-1 sm:flex-none px-8 py-3 rounded-xl font-bold uppercase tracking-widest text-xs bg-gray-100 dark:bg-white/5"
-                                >
-                                    Abort
-                                </button>
-                                <button
-                                    onClick={handleDelete}
-                                    disabled={loading}
-                                    className="flex-1 sm:flex-none px-8 py-3 rounded-xl font-bold uppercase tracking-widest text-xs bg-red-600 text-white shadow-lg"
-                                >
-                                    {loading ? 'Purging...' : 'Confirm Destruction'}
-                                </button>
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                            <div className="space-y-6">
-                                {/* Image Gallery Section */}
-                                <div className="space-y-4">
-                                    <div className="aspect-video rounded-2xl overflow-hidden border bg-black/5 relative group" style={{ borderColor: 'var(--card-border)' }}>
-                                        {mainView ? (
-                                            <img
-                                                src={mainView}
-                                                alt="Main view"
-                                                className="w-full h-full object-cover"
-                                            />
-                                        ) : (
-                                            <div className="w-full h-full flex items-center justify-center text-6xl opacity-10">📸</div>
-                                        )}
-                                        {isEditing && (
-                                            <label className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center opacity-60 hover:opacity-100 transition-opacity cursor-pointer text-white border-2 border-dashed border-white/20 m-4 rounded-xl">
-                                                <span className="text-3xl mb-2">➕</span>
-                                                <span className="text-xs font-black uppercase tracking-widest">Append Photos</span>
-                                                <input type="file" multiple className="hidden" onChange={handleAddPhotos} accept="image/*" />
-                                            </label>
-                                        )}
-                                    </div>
-
-                                    {(allImages.length > 0 || isEditing) && (
-                                        <div className="grid grid-cols-4 sm:grid-cols-5 gap-3">
-                                            {existingImages.map((img, i) => (
-                                                <div
-                                                    key={`exist-${i}`}
-                                                    className={`relative aspect-square rounded-xl overflow-hidden border cursor-pointer group transition-all ${mainView === img ? 'ring-2 ring-civic-green scale-[0.98]' : 'hover:scale-[1.02]'}`}
-                                                    style={{ borderColor: 'var(--card-border)' }}
-                                                    onClick={() => setCurrentMainImage(img)}
-                                                >
-                                                    <img src={img} className="w-full h-full object-cover" alt="" />
-                                                    {isEditing && (
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                removeExistingImage(i);
-                                                            }}
-                                                            className="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-all hover:scale-110"
-                                                        >
-                                                            ×
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            ))}
-                                            {newPhotos.map((file, i) => {
-                                                const photoUrl = URL.createObjectURL(file);
-                                                return (
-                                                    <div
-                                                        key={`new-${i}`}
-                                                        className={`relative aspect-square rounded-xl overflow-hidden border-2 cursor-pointer group transition-all ${mainView === photoUrl ? 'border-civic-green ring-2 ring-civic-green/20 scale-[0.98]' : 'border-civic-green/30 hover:scale-[1.02]'}`}
-                                                        onClick={() => setCurrentMainImage(photoUrl)}
-                                                    >
-                                                        <img src={photoUrl} className="w-full h-full object-cover" alt="" />
-                                                        <span className="absolute bottom-1 left-1 bg-civic-green text-black text-[8px] font-black px-1.5 rounded uppercase">NEW</span>
-                                                        {isEditing && (
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    removeNewPhoto(i);
-                                                                }}
-                                                                className="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-all hover:scale-110"
-                                                            >
-                                                                ×
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                )
-                                            })}
-                                            {isEditing && (
-                                                <label className="aspect-square rounded-xl border-2 border-dashed border-black/10 flex items-center justify-center cursor-pointer hover:border-civic-green/40 hover:bg-civic-green/5 transition-all text-2xl opacity-40 hover:opacity-100">
-                                                    <span>+</span>
-                                                    <input type="file" multiple className="hidden" onChange={handleAddPhotos} accept="image/*" />
-                                                </label>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="card p-6 border-opacity-50">
-                                    <h3 className="text-xs uppercase font-black tracking-[0.2em] opacity-40 mb-4">Details</h3>
-                                    {isEditing ? (
-                                        <div className="space-y-4">
-                                            <textarea
-                                                className="w-full bg-black/5 border border-white/10 rounded-xl p-4 text-sm resize-none focus:border-civic-green/50 outline-none transition-all"
-                                                rows={4}
-                                                value={editForm.description}
-                                                onChange={e => setEditForm({ ...editForm, description: e.target.value })}
-                                                placeholder="Update description..."
-                                            />
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <select
-                                                    className="bg-black/5 border border-white/10 rounded-xl p-3 text-sm outline-none"
-                                                    value={editForm.category}
-                                                    onChange={e => setEditForm({ ...editForm, category: e.target.value })}
-                                                >
-                                                    {['Road Damage', 'Garbage', 'Water Supply', 'Electricity', 'Sewage', 'Street Light', 'Park', 'Other'].map(c => (
-                                                        <option key={c} value={c}>{c}</option>
-                                                    ))}
-                                                </select>
-                                                <select
-                                                    className="bg-black/5 border border-white/10 rounded-xl p-3 text-sm outline-none"
-                                                    value={editForm.urgency}
-                                                    onChange={e => setEditForm({ ...editForm, urgency: e.target.value })}
-                                                >
-                                                    {['Low', 'Medium', 'High'].map(u => (
-                                                        <option key={u} value={u}>{u}</option>
-                                                    ))}
-                                                </select>
-                                                <select
-                                                    className="bg-black/5 border border-white/10 rounded-xl p-3 text-sm outline-none"
-                                                    value={editForm.status}
-                                                    onChange={e => setEditForm({ ...editForm, status: e.target.value })}
-                                                >
-                                                    {['Pending', 'In Progress', 'Resolved'].map(s => (
-                                                        <option key={s} value={s}>{s}</option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <div className="space-y-4">
-                                            <p className="text-sm opacity-60 leading-relaxed mb-6">{complaint.description}</p>
-                                            <div className="flex items-center gap-4">
-                                                <span className="text-xl opacity-40">🏷️</span>
-                                                <div>
-                                                    <p className="text-[10px] uppercase font-black opacity-40 tracking-widest">Type</p>
-                                                    <p className="font-bold">{complaint.category}</p>
-                                                </div>
-                                            </div>
-                                            <div className="flex items-center gap-4">
-                                                <span className="text-xl opacity-40">⚠️</span>
-                                                <div>
-                                                    <p className="text-[10px] uppercase font-black opacity-40 tracking-widest">Priority</p>
-                                                    <p className={`font-bold ${complaint.urgency === 'High' ? 'text-red-500' : complaint.urgency === 'Medium' ? 'text-yellow-500' : 'text-civic-green'}`}>
-                                                        {complaint.urgency}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            <div className="flex items-center gap-4">
-                                                <span className="text-xl opacity-40">🏷️</span>
-                                                <div>
-                                                    <p className="text-[10px] uppercase font-black opacity-40 tracking-widest">Status</p>
-                                                    <p className={`font-bold px-3 py-1 rounded-full text-[10px] uppercase tracking-wider inline-block mt-1 ${statusBadge(complaint.status)}`}>
-                                                        {complaint.status}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            <div className="flex items-center gap-4">
-                                                <span className="text-xl opacity-40">📅</span>
-                                                <div>
-                                                    <p className="text-[10px] uppercase font-black opacity-40 tracking-widest">Reported On</p>
-                                                    <p className="font-bold">{new Date(complaint.createdAt).toLocaleDateString()}</p>
-                                                </div>
-                                            </div>
-                                            <div className="flex items-start gap-4">
-                                                <span className="text-xl opacity-40">📍</span>
-                                                <div>
-                                                    <p className="text-[10px] uppercase font-black opacity-40 tracking-widest">Address</p>
-                                                    <p className="font-bold text-sm">{complaint.fullAddress}</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            <div className="space-y-6">
-                                <div className="card p-6 border-opacity-50">
-                                    <h3 className="text-xs uppercase font-black tracking-[0.2em] opacity-40 mb-4">Location</h3>
-                                    <div className="h-64 rounded-2xl overflow-hidden border" style={{ borderColor: 'var(--card-border)' }}>
-                                        <ManualMap
-                                            center={[complaint.latitude, complaint.longitude]}
-                                            markerPos={[complaint.latitude, complaint.longitude]}
-                                        />
-                                    </div>
-                                </div>
-
-                                {isEditing ? (
-                                    <div className="flex gap-4">
-                                        {/* Helper message removed as Save is now in header */}
-                                    </div>
-                                ) : (
-                                    <div className="card p-6 border-opacity-50">
-                                        <h3 className="text-xs uppercase font-black tracking-[0.2em] opacity-40 mb-4">Discussion ({complaint.comments?.length || 0})</h3>
-
-                                        {/* Add Comment Section */}
-                                        <div className="mb-6 flex gap-3">
-                                            <input
-                                                type="text"
-                                                placeholder="Add a comment..."
-                                                className="flex-1 bg-black/5 border border-white/10 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-civic-green/50 transition-all"
-                                                id="commentInput"
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter' && e.target.value.trim()) {
-                                                        onUpdate(complaint, 'comment', e.target.value);
-                                                        e.target.value = '';
-                                                    }
-                                                }}
-                                            />
-                                            <button
-                                                onClick={() => {
-                                                    const input = document.getElementById('commentInput');
-                                                    if (input.value.trim()) {
-                                                        onUpdate(complaint, 'comment', input.value);
-                                                        input.value = '';
-                                                    }
-                                                }}
-                                                className="px-4 py-2 bg-civic-green text-black text-[10px] font-black uppercase tracking-widest rounded-xl shadow-neon hover:scale-105 transition-all"
-                                            >
-                                                Post
-                                            </button>
-                                        </div>
-
-                                        {complaint.comments?.length > 0 ? (
-                                            <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-                                                {[...complaint.comments].reverse().map((comment, i) => (
-                                                    <div key={i} className="flex gap-3">
-                                                        <div className="w-8 h-8 min-w-[32px] rounded-lg bg-civic-green/10 flex items-center justify-center text-[10px] font-bold">
-                                                            {comment.userName?.[0] || 'U'}
-                                                        </div>
-                                                        <div className="flex-1 bg-black/5 rounded-2xl p-3">
-                                                            <div className="flex justify-between items-center mb-1">
-                                                                <p className="font-bold text-[11px]">{comment.userName}</p>
-                                                                <p className="text-[9px] opacity-40 uppercase tracking-tighter">
-                                                                    {new Date(comment.timestamp || comment.createdAt).toLocaleDateString()}
-                                                                </p>
-                                                            </div>
-                                                            <p className="text-xs opacity-80">{comment.content || comment.text}</p>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        ) : (
-                                            <div className="text-center py-8 opacity-40">
-                                                <p className="text-sm italic">No discussions yet.</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
-                </div>
-            </motion.div>
-        </motion.div>
-    );
-}
+// DetailModal moved to SharedComponents
 
 const MyComplaints = () => {
     const { user } = useAuth();
@@ -768,6 +308,7 @@ const MyComplaints = () => {
     const [error, setError] = useState('')
     const [selectedComplaint, setSelectedComplaint] = useState(null)
     const [statusFilter, setStatusFilter] = useState('All')
+    const [priorityFilter, setPriorityFilter] = useState('All')
     const [isNearby, setIsNearby] = useState(false)
     const [location, setLocation] = useState(null)
     const [directDelete, setDirectDelete] = useState(false)
@@ -777,16 +318,15 @@ const MyComplaints = () => {
         setError('')
         try {
             const params = {}
-            if (statusFilter !== 'All') {
-                params.status = statusFilter
-            }
+            if (statusFilter !== 'All') params.status = statusFilter
+            if (priorityFilter !== 'All') params.priority = priorityFilter
 
             if (isNearby && location) {
                 const { data } = await api.get('/issues/nearby', {
                     params: {
                         lat: location.lat,
                         lng: location.lng,
-                        radius: 30, // Updated to 30km
+                        radius: 30,
                         ...params
                     }
                 })
@@ -801,7 +341,7 @@ const MyComplaints = () => {
         } finally {
             setLoading(false)
         }
-    }, [isNearby, location, statusFilter])
+    }, [isNearby, location, statusFilter, priorityFilter])
 
     useEffect(() => {
         fetchIssues()
@@ -869,6 +409,20 @@ const MyComplaints = () => {
         fetchIssues();
     }
 
+    const handleAction = async (issueId, action) => {
+        try {
+            const { data } = await api.post(`/issues/${issueId}/${action}`);
+            setIssues(prev => prev.map(iss => iss._id === issueId ? { ...iss, ...data.issue } : iss));
+            if (selectedComplaint?._id === issueId) {
+                setSelectedComplaint(prev => ({ ...prev, ...data.issue }));
+            }
+        } catch (err) {
+            console.error(`Error ${action}ing issue:`, err);
+            const message = err.response?.data?.message || `Failed to ${action} mission.`;
+            alert(message);
+        }
+    }
+
     const handleDelete = (id) => {
         setIssues(prev => prev.filter(iss => iss._id !== id));
         setSelectedComplaint(null);
@@ -901,13 +455,15 @@ const MyComplaints = () => {
                     <div className="absolute right-0 top-full mt-2 w-56 p-2 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl opacity-0 translate-y-2 pointer-events-none group-hover:opacity-100 group-hover:translate-y-0 group-hover:pointer-events-auto transition-all duration-300 z-[110]">
                         <div className="p-2 text-[10px] font-black uppercase tracking-widest opacity-40 mb-1">Search Tools</div>
 
-                        <button
-                            onClick={toggleNearbyFilter}
-                            className={`w-full flex items-center justify-between p-3 rounded-xl text-xs font-bold transition-all ${isNearby ? 'bg-civic-green/10 text-civic-green' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 opacity-70 hover:opacity-100'}`}
-                        >
-                            <span className="flex items-center gap-2">📍 Nearby (30km)</span>
-                            {isNearby && <div className="w-2 h-2 rounded-full bg-civic-green animate-pulse" />}
-                        </button>
+                        {user?.role !== 'citizen' && (
+                            <button
+                                onClick={toggleNearbyFilter}
+                                className={`w-full flex items-center justify-between p-3 rounded-xl text-xs font-bold transition-all ${isNearby ? 'bg-civic-green/10 text-civic-green' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 opacity-70 hover:opacity-100'}`}
+                            >
+                                <span className="flex items-center gap-2">📍 Nearby (30km)</span>
+                                {isNearby && <div className="w-2 h-2 rounded-full bg-civic-green animate-pulse" />}
+                            </button>
+                        )}
 
                         <div className="h-px bg-zinc-100 dark:bg-zinc-800 my-2" />
                         <div className="p-2 text-[10px] font-black uppercase tracking-widest opacity-40 mb-1">Filter by Status</div>
@@ -919,6 +475,19 @@ const MyComplaints = () => {
                                 className={`w-full text-left p-3 rounded-xl text-xs font-bold transition-all ${statusFilter === status ? 'bg-civic-green/10 text-civic-green' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 opacity-70 hover:opacity-100'}`}
                             >
                                 {status === 'All' ? '📂 All Issues' : status === 'Pending' ? '🟠 Pending' : status === 'In Progress' ? '🔵 In Progress' : '🟢 Resolved'}
+                            </button>
+                        ))}
+
+                        <div className="h-px bg-zinc-100 dark:bg-zinc-800 my-2" />
+                        <div className="p-2 text-[10px] font-black uppercase tracking-widest opacity-40 mb-1">Filter by Priority</div>
+
+                        {['All', 'High', 'Medium', 'Low'].map(p => (
+                            <button
+                                key={p}
+                                onClick={() => setPriorityFilter(p)}
+                                className={`w-full text-left p-3 rounded-xl text-xs font-bold transition-all ${priorityFilter === p ? 'bg-civic-green/10 text-civic-green' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 opacity-70 hover:opacity-100'}`}
+                            >
+                                {p === 'All' ? '📶 All Priorities' : p === 'High' ? '🔴 High' : p === 'Medium' ? '🟡 Medium' : '🟢 Low'}
                             </button>
                         ))}
                     </div>
@@ -951,6 +520,7 @@ const MyComplaints = () => {
                             onClick={(c, action) => handleOpenDetail(c, action)}
                             onDelete={(c) => handleOpenDetail(c, true)}
                             currentUser={user}
+                            onAction={handleAction}
                         />
                     ))}
                 </div>

@@ -9,11 +9,14 @@ const Dashboard = () => {
     const [stats, setStats] = useState({ total: 0, pending: 0, inProgress: 0, resolved: 0 })
     const [recentActivity, setRecentActivity] = useState([])
     const [loading, setLoading] = useState(true)
+    const [priorityFilter, setPriorityFilter] = useState('All')
 
     useEffect(() => {
         const fetchDashboardData = async () => {
             try {
-                const res = await api.get('/issues/my')
+                const res = await api.get('/issues/my', {
+                    params: { priority: priorityFilter }
+                })
                 const issues = res.data
 
                 const statsObj = {
@@ -24,7 +27,6 @@ const Dashboard = () => {
                 }
                 setStats(statsObj)
 
-                // Last 3 activities (sort by updatedAt or createdAt)
                 const activities = issues
                     .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
                     .slice(0, 3)
@@ -41,7 +43,7 @@ const Dashboard = () => {
             }
         }
         fetchDashboardData()
-    }, [])
+    }, [priorityFilter])
 
     const statCards = [
         { title: 'Total Issues', count: stats.total, icon: '⚠️', color: 'text-blue-500' },
@@ -67,8 +69,28 @@ const Dashboard = () => {
             variants={containerVariants}
             className="main-container max-w-6xl mx-auto px-4 py-8"
         >
-            <motion.div variants={itemVariants} className="mb-8">
-                <h1 className="text-3xl font-bold mb-2" style={{ color: 'var(--text-color)' }}>User Dashboard</h1>
+            <motion.div variants={itemVariants} className="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
+                <div>
+                    <h1 className="text-3xl font-bold mb-2" style={{ color: 'var(--text-color)' }}>User Dashboard</h1>
+                    <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-civic-green shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
+                        <p className="text-xs font-black uppercase tracking-widest opacity-60">Logged in as <span className="text-civic-green">Citizen</span></p>
+                    </div>
+                </div>
+
+                <div className="flex gap-2 bg-zinc-100 dark:bg-zinc-800 p-1 rounded-xl border border-zinc-200 dark:border-zinc-700">
+                    {['All', 'High', 'Medium', 'Low'].map(p => (
+                        <button
+                            key={p}
+                            onClick={() => setPriorityFilter(p)}
+                            className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${priorityFilter === p
+                                ? 'bg-white dark:bg-zinc-700 shadow-sm scale-[1.02] text-civic-green'
+                                : 'opacity-40 hover:opacity-100'}`}
+                        >
+                            {p}
+                        </button>
+                    ))}
+                </div>
             </motion.div>
 
             <motion.div variants={itemVariants} className="bg-white dark:bg-zinc-900 rounded-3xl p-6 sm:p-8 shadow-sm border border-zinc-200 dark:border-zinc-800 mb-8">
@@ -116,10 +138,12 @@ const Dashboard = () => {
                     <div>
                         <h3 className="text-lg font-bold mb-4" style={{ color: 'var(--text-color)' }}>Quick Actions</h3>
                         <div className="flex flex-col gap-3">
-                            <Link to="/report-issue" className="flex items-center gap-3 px-6 py-4 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-bold text-sm transition-all shadow-lg shadow-blue-500/20">
-                                <span className="text-lg">+</span>
-                                Report New Issue
-                            </Link>
+                            {user?.role === 'citizen' && (
+                                <Link to="/report-issue" className="flex items-center gap-3 px-6 py-4 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-bold text-sm transition-all shadow-lg shadow-blue-500/20">
+                                    <span className="text-lg">+</span>
+                                    Report New Issue
+                                </Link>
+                            )}
                             <Link to="/my-complaints" className="flex items-center gap-3 px-6 py-4 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600 rounded-xl font-bold text-sm transition-all" style={{ color: 'var(--text-color)' }}>
                                 <span className="text-lg">📋</span>
                                 View All Complaints

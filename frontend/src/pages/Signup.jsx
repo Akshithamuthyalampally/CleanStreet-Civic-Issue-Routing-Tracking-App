@@ -6,7 +6,7 @@ import api from '../api/axios'
 const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/
 
 const Signup = () => {
-    const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', confirmPassword: '' })
+    const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', confirmPassword: '', role: 'citizen' })
     const [showPass, setShowPass] = useState(false)
     const [showConfirm, setShowConfirm] = useState(false)
     const [error, setError] = useState('')
@@ -33,8 +33,14 @@ const Signup = () => {
 
         setLoading(true)
         try {
-            await api.post('/auth/register', { name: form.name, email: form.email, phone: form.phone, password: form.password })
-            setSuccess('Registration successful! Access granted.')
+            await api.post('/auth/register', {
+                name: form.name,
+                email: form.email,
+                phone: form.phone,
+                password: form.password,
+                role: form.role
+            })
+            setSuccess(`Registration successful as ${form.role}! Redirecting...`)
             setTimeout(() => navigate('/login'), 2000)
         } catch (err) {
             setError(err.response?.data?.message || 'Registration failed')
@@ -128,9 +134,24 @@ const Signup = () => {
                             </div>
                         </div>
 
-                        <div>
-                            <label className="label">Phone</label>
-                            <input type="tel" name="phone" value={form.phone} onChange={handleChange} className="input-field" placeholder="+1 (555) 000-0000" />
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="label">Phone</label>
+                                <input type="tel" name="phone" value={form.phone} onChange={handleChange} className="input-field" placeholder="+1 (555) 000-0000" />
+                            </div>
+                            <div>
+                                <label className="label">Access Role</label>
+                                <select
+                                    name="role"
+                                    value={form.role}
+                                    onChange={handleChange}
+                                    className="input-field appearance-none cursor-pointer bg-black/5 dark:bg-white/5 border-civic-green/20"
+                                >
+                                    <option value="citizen">Citizen</option>
+                                    <option value="volunteer">Volunteer</option>
+                                    <option value="admin">Admin</option>
+                                </select>
+                            </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
@@ -173,7 +194,7 @@ const Signup = () => {
                         </p>
 
                         <button type="submit" disabled={loading} className="btn-primary mt-2">
-                            {loading ? 'Initializing...' : 'Register as Citizen'}
+                            {loading ? 'Initializing...' : `Register as ${form.role.charAt(0).toUpperCase() + form.role.slice(1)}`}
                         </button>
                     </form>
 

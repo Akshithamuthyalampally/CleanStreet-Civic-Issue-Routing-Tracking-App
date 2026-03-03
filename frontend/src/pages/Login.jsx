@@ -5,7 +5,7 @@ import api from '../api/axios'
 import { useAuth } from '../context/AuthContext'
 
 const Login = () => {
-    const [form, setForm] = useState({ email: '', password: '' })
+    const [form, setForm] = useState({ email: '', password: '', role: 'Citizen' })
     const [showPass, setShowPass] = useState(false)
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
@@ -22,7 +22,11 @@ const Login = () => {
         try {
             const { data } = await api.post('/auth/login', form)
             login(data.token, data.user)
-            navigate('/dashboard')
+            if (data.user.role === 'volunteer') {
+                navigate('/volunteer-dashboard')
+            } else {
+                navigate('/dashboard')
+            }
         } catch (err) {
             setError(err.response?.data?.message || 'Login failed')
         } finally {
@@ -108,6 +112,21 @@ const Login = () => {
                                 className="input-field"
                                 placeholder="name@civictrack.org"
                             />
+                        </div>
+
+                        <div className="space-y-1">
+                            <label className="label">Login Role</label>
+                            <select
+                                name="role"
+                                value={form.role}
+                                onChange={handleChange}
+                                className="input-field appearance-none cursor-pointer"
+                                style={{ backgroundColor: 'var(--input-bg)' }}
+                            >
+                                <option value="Citizen">Citizen</option>
+                                <option value="Volunteer">Volunteer</option>
+                                <option value="Admin">Admin (Future)</option>
+                            </select>
                         </div>
 
                         <div className="space-y-1">

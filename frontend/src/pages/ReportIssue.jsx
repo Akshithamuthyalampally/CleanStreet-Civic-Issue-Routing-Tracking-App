@@ -2,19 +2,11 @@ import React, { useState, useCallback, useEffect, useMemo, useRef, Component } f
 import L from 'leaflet'
 import api from '../api/axios'
 
-// CDN-backed assets for maximum reliability across different environments
-const MARKER_ICON_2X = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png';
-const MARKER_ICON = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png';
-const MARKER_SHADOW = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png';
+import { ManualMap } from '../components/SharedComponents'
 
 const categories = ['Road Damage', 'Garbage', 'Water Supply', 'Electricity', 'Sewage', 'Street Light', 'Park', 'Other']
 const DEFAULT_COORDS = [11.6643, 78.1460]; // Salem, TN (Default)
 
-/**
- * INTERNAL ERROR BOUNDARY
- * This component catches any runtime rendering errors and displays a clear message
- * with a stack trace, preventing the "blank screen" total app failure.
- */
 class LocalErrorBoundary extends Component {
     constructor(props) {
         super(props);
@@ -49,91 +41,6 @@ class LocalErrorBoundary extends Component {
         return this.props.children;
     }
 }
-
-/**
- * MANUAL LEAFLET MAP COMPONENT
- * Bypasses react-leaflet entirely to resolve "render2 is not a function" errors.
- * Uses direct DOM manipulation on a persistent ref.
- */
-const ManualMap = ({ center, markerPos, onSelect }) => {
-    const mapContainerRef = useRef(null);
-    const mapInstanceRef = useRef(null);
-    const markerRef = useRef(null);
-
-    // Initial map setup
-    useEffect(() => {
-        if (!mapContainerRef.current || mapInstanceRef.current) return;
-
-        // Create map instance
-        const map = L.map(mapContainerRef.current, {
-            center: center,
-            zoom: 15,
-            scrollWheelZoom: true,
-            zoomControl: true,
-        });
-
-        // Add tile layer
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap'
-        }).addTo(map);
-
-        // Click handler
-        map.on('click', (e) => {
-            const { lat, lng } = e.latlng;
-            onSelect(lat, lng);
-        });
-
-        mapInstanceRef.current = map;
-
-        // Cleanup
-        return () => {
-            if (mapInstanceRef.current) {
-                mapInstanceRef.current.remove();
-                mapInstanceRef.current = null;
-            }
-        };
-    }, []); // Only once on mount
-
-    // sync marker and center
-    useEffect(() => {
-        const map = mapInstanceRef.current;
-        if (!map) return;
-
-        // Update map center
-        if (center) {
-            map.setView(center, map.getZoom(), { animate: true });
-        }
-
-        // Update target marker
-        if (markerPos.lat && markerPos.lng) {
-            if (markerRef.current) {
-                markerRef.current.setLatLng([markerPos.lat, markerPos.lng]);
-            } else {
-                const customIcon = L.icon({
-                    iconUrl: MARKER_ICON,
-                    iconRetinaUrl: MARKER_ICON_2X,
-                    shadowUrl: MARKER_SHADOW,
-                    iconSize: [25, 41],
-                    iconAnchor: [12, 41],
-                    popupAnchor: [1, -34],
-                    shadowSize: [41, 41]
-                });
-                markerRef.current = L.marker([markerPos.lat, markerPos.lng], { icon: customIcon }).addTo(map);
-            }
-        } else if (markerRef.current) {
-            markerRef.current.remove();
-            markerRef.current = null;
-        }
-    }, [center, markerPos.lat, markerPos.lng]);
-
-    return (
-        <div
-            ref={mapContainerRef}
-            className="w-full h-full bg-black/10"
-            style={{ zIndex: 0 }}
-        />
-    );
-};
 
 const ReportIssue = () => {
     const [form, setForm] = useState({

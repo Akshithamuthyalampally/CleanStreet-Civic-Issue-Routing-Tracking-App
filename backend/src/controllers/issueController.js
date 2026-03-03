@@ -49,36 +49,60 @@ const updateIssue = async (req, res) => {
             return res.status(404).json({ message: 'Issue not found' });
         }
 
-        if (issue.userId.toString() !== req.userId) {
-            return res.status(403).json({ message: 'Unauthorized to update this issue' });
-        }
-
-        // Parse existing images if they come as a JSON string or stay as array
         let preservedImages = [];
         if (existingImages) {
             preservedImages = Array.isArray(existingImages) ? existingImages : [existingImages];
+        } else {
+            preservedImages = issue.images;
         }
 
-        const updateFields = {
-            title: title || issue.title,
-            description: description || issue.description,
-            category: category || issue.category,
-            fullAddress: fullAddress || issue.fullAddress,
-            landmark: landmark || issue.landmark,
-            latitude: latitude ? Number(latitude) : issue.latitude,
-            longitude: longitude ? Number(longitude) : issue.longitude,
-            images: preservedImages,
-            urgency: urgency || issue.urgency,
-            status: status || issue.status
-        };
+        const updateFields = {};
 
-        if (req.files && req.files.length > 0) {
-            const newImages = req.files.map(file => {
-                if (file.path.startsWith('http')) return file.path;
-                const baseUrl = `${req.protocol}://${req.get('host')}`;
-                return `${baseUrl}/${file.path.replace(/\\/g, '/')}`;
-            });
-            updateFields.images = [...preservedImages, ...newImages];
+        if (req.userRole === 'citizen') {
+            // Citizen: Can edit only their own issues
+            if (issue.userId.toString() !== req.userId) {
+                return res.status(403).json({ message: 'Unauthorized: You can only edit your own reports.' });
+            }
+            // Citizen: Cannot edit status
+            if (status && status !== issue.status) {
+                return res.status(403).json({ message: 'Unauthorized: Citizens cannot modify issue status.' });
+            }
+
+            updateFields.title = title || issue.title;
+            updateFields.description = description || issue.description;
+            updateFields.category = category || issue.category;
+            updateFields.fullAddress = fullAddress || issue.fullAddress;
+            updateFields.landmark = landmark || issue.landmark;
+            updateFields.latitude = latitude ? Number(latitude) : issue.latitude;
+            updateFields.longitude = longitude ? Number(longitude) : issue.longitude;
+            updateFields.urgency = urgency || issue.urgency;
+            updateFields.images = preservedImages;
+
+            if (req.files && req.files.length > 0) {
+                const newImages = req.files.map(file => {
+                    if (file.path.startsWith('http')) return file.path;
+                    const baseUrl = `${req.protocol}://${req.get('host')}`;
+                    return `${baseUrl}/${file.path.replace(/\\/g, '/')}`;
+                });
+                updateFields.images = [...preservedImages, ...newImages];
+            }
+        } else if (req.userRole === 'volunteer' || req.userRole === 'admin') {
+            // Volunteer/Admin: Only allowed to edit status, and MUST be the assigned volunteer
+            if (issue.assignedVolunteer && issue.assignedVolunteer.toString() !== req.userId && req.userRole !== 'admin') {
+                return res.status(403).json({ message: 'Unauthorized: This issue is assigned to another volunteer.' });
+            }
+
+            if (!issue.assignedVolunteer && req.userRole !== 'admin') {
+                return res.status(403).json({ message: 'Unauthorized: You must accept this issue before updating its status.' });
+            }
+
+            updateFields.status = status || issue.status;
+            // Ensure other fields are NOT modified
+            updateFields.title = issue.title;
+            updateFields.description = issue.description;
+            updateFields.images = issue.images;
+        } else {
+            return res.status(403).json({ message: 'Unauthorized: Role not recognized.' });
         }
 
         const updatedIssue = await Issue.findByIdAndUpdate(id, updateFields, { new: true }).populate('userId', 'name');
@@ -99,16 +123,20 @@ const updateIssue = async (req, res) => {
 // GET /api/issues
 const getAllIssues = async (req, res) => {
     try {
-        const { status } = req.query;
+        const { status, priority } = req.query;
         const query = {};
 
         if (status && status !== 'All') {
             const cleanStatus = status.trim();
-            // Case-insensitive match that handles optional leading/trailing whitespace
             query.status = { $regex: new RegExp(`^\\s*${cleanStatus}\\s*$`, 'i') };
         }
 
-        const issues = await Issue.find(query).populate('userId', 'name').sort({ createdAt: -1 });
+        if (priority && priority !== 'All') {
+            const cleanPriority = priority.trim();
+            query.urgency = { $regex: new RegExp(`^\\s*${cleanPriority}\\s*$`, 'i') };
+        }
+
+        const issues = await Issue.find(query).populate('userId', 'name').populate('assignedVolunteer', 'name').sort({ createdAt: -1 });
         // Map to include userName directly for easier frontend access
         const mappedIssues = issues.map(issue => ({
             ...issue._doc,
@@ -124,7 +152,7 @@ const getAllIssues = async (req, res) => {
 // GET /api/issues/my
 const getMyIssues = async (req, res) => {
     try {
-        const { status } = req.query;
+        const { status, priority } = req.query;
         const query = { userId: req.userId };
 
         if (status && status !== 'All') {
@@ -132,7 +160,12 @@ const getMyIssues = async (req, res) => {
             query.status = { $regex: new RegExp(`^\\s*${cleanStatus}\\s*$`, 'i') };
         }
 
-        const issues = await Issue.find(query).populate('userId', 'name').sort({ createdAt: -1 });
+        if (priority && priority !== 'All') {
+            const cleanPriority = priority.trim();
+            query.urgency = { $regex: new RegExp(`^\\s*${cleanPriority}\\s*$`, 'i') };
+        }
+
+        const issues = await Issue.find(query).populate('userId', 'name').populate('assignedVolunteer', 'name').sort({ createdAt: -1 });
         const mappedIssues = issues.map(issue => ({
             ...issue._doc,
             userName: issue.userId?.name || 'Anonymous'
@@ -242,13 +275,22 @@ const downvoteIssue = async (req, res) => {
 // GET /api/issues/nearby?lat=...&lng=...&radius=...
 const getNearbyIssues = async (req, res) => {
     try {
-        const { lat, lng, radius, status } = req.query;
+        if (req.userRole === 'citizen') {
+            return res.status(403).json({ message: 'Access denied. Nearby issues are restricted to volunteers.' });
+        }
+        const { lat, lng, radius, status, priority } = req.query;
         if (!lat || !lng) {
+            console.error('Nearby fetch failed: Missing coordinates', { lat, lng });
             return res.status(400).json({ message: 'Latitude and longitude are required' });
         }
 
-        const centerLat = Number(lat);
-        const centerLng = Number(lng);
+        const centreLat = Number(lat);
+        const centreLng = Number(lng);
+
+        if (isNaN(centreLat) || isNaN(centreLng)) {
+            console.error('Nearby fetch failed: Invalid coordinates', { lat, lng });
+            return res.status(400).json({ message: 'Invalid latitude or longitude' });
+        }
         const searchRadius = Number(radius) || 30; // Radius from frontend, default 30km
 
         const query = {};
@@ -257,7 +299,12 @@ const getNearbyIssues = async (req, res) => {
             query.status = { $regex: new RegExp(`^\\s*${cleanStatus}\\s*$`, 'i') };
         }
 
-        const issues = await Issue.find(query).populate('userId', 'name').sort({ createdAt: -1 });
+        if (priority && priority !== 'All') {
+            const cleanPriority = priority.trim();
+            query.urgency = { $regex: new RegExp(`^\\s*${cleanPriority}\\s*$`, 'i') };
+        }
+
+        const issues = await Issue.find(query).populate('userId', 'name').populate('assignedVolunteer', 'name').sort({ createdAt: -1 });
 
         // Simple Haversine distance filtering (in km)
         const getDistance = (lat1, lon1, lat2, lon2) => {
@@ -273,7 +320,7 @@ const getNearbyIssues = async (req, res) => {
         };
 
         const nearbyIssues = issues.filter(issue => {
-            const distance = getDistance(centerLat, centerLng, issue.latitude, issue.longitude);
+            const distance = getDistance(centreLat, centreLng, issue.latitude, issue.longitude);
             return distance <= searchRadius;
         }).map(issue => ({
             ...issue._doc,
@@ -283,7 +330,7 @@ const getNearbyIssues = async (req, res) => {
         res.json(nearbyIssues);
     } catch (err) {
         console.error('Error fetching nearby issues:', err);
-        res.status(500).json({ message: 'Server error' });
+        res.status(500).json({ message: `Server error: ${err.message}` });
     }
 };
 
@@ -319,4 +366,52 @@ const addComment = async (req, res) => {
     }
 };
 
-module.exports = { createIssue, getAllIssues, getMyIssues, updateIssue, deleteIssue, upvoteIssue, downvoteIssue, addComment, getNearbyIssues };
+// POST /api/issues/:id/accept
+const acceptIssue = async (req, res) => {
+    try {
+        if (req.userRole !== 'volunteer' && req.userRole !== 'admin') {
+            return res.status(403).json({ message: 'Only volunteers can accept issues' });
+        }
+
+        const issue = await Issue.findById(req.params.id);
+        if (!issue) return res.status(404).json({ message: 'Issue not found' });
+
+        if (issue.assignedVolunteer) {
+            return res.status(400).json({ message: 'this issue is already handling by another volunteer, kindly solve the other issues' });
+        }
+
+        issue.assignedVolunteer = req.userId;
+        await issue.save();
+
+        const updatedIssue = await Issue.findById(req.params.id).populate('userId', 'name').populate('assignedVolunteer', 'name');
+        res.json({ message: 'Issue accepted', issue: updatedIssue });
+    } catch (err) {
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+// POST /api/issues/:id/reject
+const rejectIssue = async (req, res) => {
+    try {
+        if (req.userRole !== 'volunteer' && req.userRole !== 'admin') {
+            return res.status(403).json({ message: 'Only volunteers can reject issues' });
+        }
+
+        const issue = await Issue.findById(req.params.id);
+        if (!issue) return res.status(404).json({ message: 'Issue not found' });
+
+        if (issue.assignedVolunteer?.toString() !== req.userId && req.userRole !== 'admin') {
+            return res.status(403).json({ message: 'You are not assigned to this issue' });
+        }
+
+        issue.assignedVolunteer = null;
+        await issue.save();
+
+        const updatedIssue = await Issue.findById(req.params.id).populate('userId', 'name').populate('assignedVolunteer', 'name');
+        res.json({ message: 'Issue rejected', issue: updatedIssue });
+    } catch (err) {
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+module.exports = { createIssue, getAllIssues, getMyIssues, updateIssue, deleteIssue, upvoteIssue, downvoteIssue, addComment, getNearbyIssues, acceptIssue, rejectIssue };
