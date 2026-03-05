@@ -279,6 +279,28 @@ export const DetailModal = ({ complaint, onClose, onUpdate, onDelete, initialDel
                                                 <span className={`px-3 py-1 rounded-full border border-zinc-200 dark:border-zinc-800`}>{complaint.urgency}</span>
                                                 <span className={`px-3 py-1 rounded-full border border-zinc-200 dark:border-zinc-800`}>{complaint.category}</span>
                                             </div>
+                                            {complaint.assignedVolunteer ? (
+                                                <div className="p-4 rounded-2xl bg-blue-500/5 border border-blue-500/10 flex items-center gap-3">
+                                                    <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-xl">🛡️</div>
+                                                    <div>
+                                                        <p className="text-[10px] font-black uppercase tracking-widest text-blue-500">Mission Hero</p>
+                                                        <p className="text-sm font-bold" style={{ color: 'var(--text-color)' }}>
+                                                            {complaint.assignedVolunteer.name}
+                                                            <span className="ml-2 opacity-40 font-black tracking-tighter">(ID: {complaint.assignedVolunteer.volunteerId || 'N/A'})</span>
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="p-4 rounded-2xl bg-orange-500/5 border border-orange-500/10 flex items-center gap-3">
+                                                    <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center text-xl">⏳</div>
+                                                    <div>
+                                                        <p className="text-[10px] font-black uppercase tracking-widest text-orange-500">Mission Status</p>
+                                                        <p className="text-sm font-bold" style={{ color: 'var(--text-color)' }}>
+                                                            Awaiting volunteer acceptance
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>

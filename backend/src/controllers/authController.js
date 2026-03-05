@@ -15,12 +15,29 @@ const register = async (req, res) => {
         if (exists) return res.status(409).json({ message: 'Email already registered' });
 
         const hashed = await bcrypt.hash(password, 10);
+        const role = req.body.role || 'citizen';
+
+        let volunteerId = undefined;
+        if (role === 'volunteer') {
+            // Generate unique volunteer ID: VOL- followed by 4 random digits
+            const randomDigits = Math.floor(1000 + Math.random() * 9000);
+            volunteerId = `VOL-${randomDigits}`;
+
+            // Check for collision (rare but possible)
+            const idExists = await User.findOne({ volunteerId });
+            if (idExists) {
+                const newDigits = Math.floor(1000 + Math.random() * 9000);
+                volunteerId = `VOL-${newDigits}`;
+            }
+        }
+
         const user = await User.create({
             name,
             email,
             password: hashed,
             phone: phone || '',
-            role: req.body.role || 'citizen'
+            role,
+            volunteerId
         });
         res.status(201).json({ message: 'Registration successful' });
     } catch (err) {
@@ -53,7 +70,16 @@ const login = async (req, res) => {
         const token = jwt.sign({ userId: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '7d' });
         res.json({
             token,
-            user: { id: user._id, name: user.name, email: user.email, phone: user.phone, location: user.location, role: user.role, profilePicture: user.profilePicture },
+            user: {
+                id: user._id,
+                name: user.name,
+                email: user.email,
+                phone: user.phone,
+                location: user.location,
+                role: user.role,
+                profilePicture: user.profilePicture,
+                volunteerId: user.volunteerId
+            },
         });
     } catch (err) {
         res.status(500).json({ message: 'Server error' });

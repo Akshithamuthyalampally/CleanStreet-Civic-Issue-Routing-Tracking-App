@@ -140,10 +140,22 @@ const ComplaintCard = ({ complaint, onClick, onDelete, onUpdate, currentUser, on
                     <p className="text-sm opacity-60 line-clamp-2 leading-relaxed h-10 italic">"{complaint.description}"</p>
                 </div>
 
-                <div className="flex items-center gap-2 text-[11px] font-bold opacity-60 mb-6 bg-zinc-50 dark:bg-zinc-800/50 p-3 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                <div className="flex items-center gap-2 text-[11px] font-bold opacity-60 mb-2 bg-zinc-50 dark:bg-zinc-800/50 p-3 rounded-xl border border-zinc-100 dark:border-zinc-800">
                     <span className="text-civic-green text-base">📍</span>
                     <span className="line-clamp-1">{complaint.fullAddress}</span>
                 </div>
+
+                {complaint.assignedVolunteer ? (
+                    <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-blue-500 bg-blue-500/5 p-3 rounded-xl border border-blue-500/10 mb-6 group-hover:bg-blue-500/10 transition-colors">
+                        <span className="text-sm">🛡️</span>
+                        <span>Accepted by: <span className="text-blue-600 dark:text-blue-400">{complaint.assignedVolunteer.name}</span> <span className="opacity-50">(ID: {complaint.assignedVolunteer.volunteerId || 'N/A'})</span></span>
+                    </div>
+                ) : (
+                    <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-orange-500 bg-orange-500/5 p-3 rounded-xl border border-orange-500/10 mb-6 transition-colors">
+                        <span className="text-sm">⏳</span>
+                        <span>Awaiting volunteer acceptance</span>
+                    </div>
+                )}
 
                 <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-y-4">
                     <div className="flex gap-2">

@@ -136,7 +136,7 @@ const getAllIssues = async (req, res) => {
             query.urgency = { $regex: new RegExp(`^\\s*${cleanPriority}\\s*$`, 'i') };
         }
 
-        const issues = await Issue.find(query).populate('userId', 'name').populate('assignedVolunteer', 'name').sort({ createdAt: -1 });
+        const issues = await Issue.find(query).populate('userId', 'name').populate('assignedVolunteer', 'name volunteerId').sort({ createdAt: -1 });
         // Map to include userName directly for easier frontend access
         const mappedIssues = issues.map(issue => ({
             ...issue._doc,
@@ -165,7 +165,7 @@ const getMyIssues = async (req, res) => {
             query.urgency = { $regex: new RegExp(`^\\s*${cleanPriority}\\s*$`, 'i') };
         }
 
-        const issues = await Issue.find(query).populate('userId', 'name').populate('assignedVolunteer', 'name').sort({ createdAt: -1 });
+        const issues = await Issue.find(query).populate('userId', 'name').populate('assignedVolunteer', 'name volunteerId').sort({ createdAt: -1 });
         const mappedIssues = issues.map(issue => ({
             ...issue._doc,
             userName: issue.userId?.name || 'Anonymous'
@@ -304,7 +304,7 @@ const getNearbyIssues = async (req, res) => {
             query.urgency = { $regex: new RegExp(`^\\s*${cleanPriority}\\s*$`, 'i') };
         }
 
-        const issues = await Issue.find(query).populate('userId', 'name').populate('assignedVolunteer', 'name').sort({ createdAt: -1 });
+        const issues = await Issue.find(query).populate('userId', 'name').populate('assignedVolunteer', 'name volunteerId').sort({ createdAt: -1 });
 
         // Simple Haversine distance filtering (in km)
         const getDistance = (lat1, lon1, lat2, lon2) => {
@@ -383,7 +383,7 @@ const acceptIssue = async (req, res) => {
         issue.assignedVolunteer = req.userId;
         await issue.save();
 
-        const updatedIssue = await Issue.findById(req.params.id).populate('userId', 'name').populate('assignedVolunteer', 'name');
+        const updatedIssue = await Issue.findById(req.params.id).populate('userId', 'name').populate('assignedVolunteer', 'name volunteerId');
         res.json({ message: 'Issue accepted', issue: updatedIssue });
     } catch (err) {
         res.status(500).json({ message: 'Server error' });
@@ -407,7 +407,7 @@ const rejectIssue = async (req, res) => {
         issue.assignedVolunteer = null;
         await issue.save();
 
-        const updatedIssue = await Issue.findById(req.params.id).populate('userId', 'name').populate('assignedVolunteer', 'name');
+        const updatedIssue = await Issue.findById(req.params.id).populate('userId', 'name').populate('assignedVolunteer', 'name volunteerId');
         res.json({ message: 'Issue rejected', issue: updatedIssue });
     } catch (err) {
         res.status(500).json({ message: 'Server error' });

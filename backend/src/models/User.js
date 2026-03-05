@@ -7,6 +7,7 @@ const userSchema = new mongoose.Schema({
   phone: { type: String, default: '' },
   location: { type: String, default: '' },
   role: { type: String, default: 'citizen' },
+  volunteerId: { type: String, unique: true, sparse: true },
   profilePicture: { type: String, default: '' },
 }, { timestamps: true });
 
