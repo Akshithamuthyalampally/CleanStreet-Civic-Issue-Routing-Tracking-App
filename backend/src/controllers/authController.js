@@ -49,23 +49,50 @@ const register = async (req, res) => {
 const login = async (req, res) => {
     try {
         const { email, password, role } = req.body;
-        if (!email || !password || !role) return res.status(400).json({ message: 'Email, password, and role selection are required' });
+        if (!email || !password || !role) {
+            console.log('Login failed: Missing fields', req.body);
+            return res.status(400).json({ message: 'Email, password, and role selection are required' });
+        }
 
+        console.log(`Login attempt for ${email} with role ${role}`);
         const user = await User.findOne({ email });
-        if (!user) return res.status(401).json({ message: 'Invalid credentials' });
+
+        if (!user) {
+            console.log('Login failed: User not found for email:', email);
+            return res.status(401).json({ message: 'Invalid credentials' });
+        }
+
+        console.log('User found:', { id: user._id, role: user.role });
+
+        // Normalize input role for comparison
+        const requestedRoleNormalized = role.toLowerCase();
+
+        // Strict validation for Admins - only allow specific domains
+        if (requestedRoleNormalized === 'admin') {
+            const adminEmailRegex = /^[a-zA-Z0-9._%+-]+@(cleanstreet\.admin|admin\.admin)$/;
+            if (!adminEmailRegex.test(email)) {
+                return res.status(403).json({ message: 'Admin access requires a valid @cleanstreet.admin or @admin.admin email.' });
+            }
+        }
 
         // Handle legacy 'user' role by migrating to 'citizen'
-        if (user.role === 'user' && role.toLowerCase() === 'citizen') {
+        if (user.role === 'user' && requestedRoleNormalized === 'citizen') {
             user.role = 'citizen';
             await user.save();
         }
 
-        if (user.role !== role.toLowerCase()) {
+        if (user.role !== requestedRoleNormalized) {
+            console.log('Login failed: Role mismatch. User role:', user.role, 'Requested:', requestedRoleNormalized);
             return res.status(401).json({ message: `Access denied. Your account is registered as ${user.role}, not ${role}.` });
         }
 
         const match = await bcrypt.compare(password, user.password);
-        if (!match) return res.status(401).json({ message: 'Invalid credentials' });
+        if (!match) {
+            console.log('Login failed: Password mismatch for user:', email);
+            return res.status(401).json({ message: 'Invalid credentials' });
+        }
+
+        console.log('Login successful for:', email);
 
         const token = jwt.sign({ userId: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '7d' });
         res.json({

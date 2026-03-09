@@ -42,9 +42,17 @@ const VolunteerCard = ({ complaint, onAction, currentUser }) => {
                 <div className="mt-auto">
                     {complaint.assignedVolunteer ? (
                         <div className="flex flex-col gap-2">
-                            <div className="text-[10px] font-black uppercase tracking-widest opacity-40 flex items-center gap-2 px-1">
-                                <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                                Assigned to: {complaint.assignedVolunteer.name || 'You'}
+                            <div className="flex flex-col gap-1">
+                                <div className="text-[10px] font-black uppercase tracking-widest opacity-40 flex items-center gap-2 px-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                                    Assigned to: {complaint.assignedVolunteer.name || 'You'}
+                                </div>
+                                {complaint.assignedBy && (
+                                    <div className="text-[9px] font-black uppercase tracking-widest text-indigo-500/60 flex items-center gap-2 px-1">
+                                        <span className="w-1.2 h-1.2 rounded-full bg-indigo-500/40"></span>
+                                        Assigned by Admin
+                                    </div>
+                                )}
                             </div>
                             <div className="flex gap-3">
                                 {complaint.assignedVolunteer._id === currentUser.id || complaint.assignedVolunteer === currentUser.id ? (

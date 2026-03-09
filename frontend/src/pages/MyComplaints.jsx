@@ -148,7 +148,16 @@ const ComplaintCard = ({ complaint, onClick, onDelete, onUpdate, currentUser, on
                 {complaint.assignedVolunteer ? (
                     <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-blue-500 bg-blue-500/5 p-3 rounded-xl border border-blue-500/10 mb-6 group-hover:bg-blue-500/10 transition-colors">
                         <span className="text-sm">🛡️</span>
-                        <span>Accepted by: <span className="text-blue-600 dark:text-blue-400">{complaint.assignedVolunteer.name}</span> <span className="opacity-50">(ID: {complaint.assignedVolunteer.volunteerId || 'N/A'})</span></span>
+                        <span>
+                            {complaint.assignedBy ? (
+                                <span className="text-blue-600 dark:text-blue-400">Assigned by Admin</span>
+                            ) : (
+                                <>
+                                    Accepted by: <span className="text-blue-600 dark:text-blue-400 ml-1">{complaint.assignedVolunteer.name}</span>
+                                    <span className="opacity-50 ml-1">(ID: {complaint.assignedVolunteer.volunteerId || 'N/A'})</span>
+                                </>
+                            )}
+                        </span>
                     </div>
                 ) : (
                     <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-orange-500 bg-orange-500/5 p-3 rounded-xl border border-orange-500/10 mb-6 transition-colors">

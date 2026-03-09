@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import api from '../api/axios'
@@ -11,7 +11,12 @@ const Dashboard = () => {
     const [loading, setLoading] = useState(true)
     const [priorityFilter, setPriorityFilter] = useState('All')
 
+    const navigate = useNavigate()
     useEffect(() => {
+        if (user?.role === 'admin') {
+            navigate('/admin/dashboard')
+            return
+        }
         const fetchDashboardData = async () => {
             try {
                 const res = await api.get('/issues/my', {
@@ -74,7 +79,7 @@ const Dashboard = () => {
                     <h1 className="text-3xl font-bold mb-2" style={{ color: 'var(--text-color)' }}>User Dashboard</h1>
                     <div className="flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full bg-civic-green shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
-                        <p className="text-xs font-black uppercase tracking-widest opacity-60">Logged in as <span className="text-civic-green">Citizen</span></p>
+                        <p className="text-xs font-black uppercase tracking-widest opacity-60">Logged in as <span className="text-civic-green">{user?.role || 'Citizen'}</span></p>
                     </div>
                 </div>
 

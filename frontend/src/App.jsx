@@ -13,6 +13,8 @@ import RegisterClean from './pages/RegisterClean'
 import MyComplaints from './pages/MyComplaints'
 import VolunteerDashboard from './pages/VolunteerDashboard'
 import AccountSettings from './pages/AccountSettings'
+import AdminLogin from './pages/AdminLogin'
+import AdminDashboard from './pages/AdminDashboard'
 import Threads from './components/Threads'
 
 const PageTransition = ({ children }) => (
@@ -110,6 +112,15 @@ function AppContent() {
               element={
                 <PrivateRoute>
                   <Layout><AccountSettings /></Layout>
+                </PrivateRoute>
+              }
+            />
+            <Route path="/admin/login" element={<PageTransition><AdminLogin /></PageTransition>} />
+            <Route
+              path="/admin/dashboard"
+              element={
+                <PrivateRoute>
+                  <Layout><AdminDashboard /></Layout>
                 </PrivateRoute>
               }
             />

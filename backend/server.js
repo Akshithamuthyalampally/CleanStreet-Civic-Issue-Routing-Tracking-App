@@ -7,6 +7,7 @@ const authRoutes = require('./src/routes/auth');
 const issueRoutes = require('./src/routes/issues');
 const cleanRoutes = require('./src/routes/clean');
 
+const adminRoutes = require('./src/routes/admin');
 const path = require('path');
 const fs = require('fs');
 
@@ -25,6 +26,9 @@ app.use('/uploads', express.static(uploadsDir));
 app.use('/api/auth', authRoutes);
 app.use('/api/issues', issueRoutes);
 app.use('/api/clean', cleanRoutes);
+app.use('/api/admin', adminRoutes);
+
+app.get('/api/version', (req, res) => res.json({ version: '1.2.0', status: 'Admin routes registered' }));
 
 app.get('/', (req, res) => res.json({ message: 'Civic App API running' }));
 

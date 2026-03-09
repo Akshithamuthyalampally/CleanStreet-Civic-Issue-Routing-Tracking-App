@@ -18,18 +18,24 @@ const Navbar = () => {
     const navigate = useNavigate()
     const [isOpen, setIsOpen] = useState(false)
 
-    const dynamicNavItems = user?.role === 'volunteer'
+    const dynamicNavItems = user?.role === 'admin'
         ? [
-            { to: '/volunteer-dashboard', label: 'Dashboard' },
-            { to: '/my-complaints', label: 'Manage Issues' },
+            { to: '/admin/dashboard', label: 'Admin Panel' },
+            { to: '/my-complaints', label: 'All Complaints' },
             { to: '/account', label: 'Account' },
         ]
-        : [
-            { to: '/dashboard', label: 'Dashboard' },
-            { to: '/report-issue', label: 'Report Issue' },
-            { to: '/my-complaints', label: 'View Complaints' },
-            { to: '/account', label: 'Account' },
-        ];
+        : user?.role === 'volunteer'
+            ? [
+                { to: '/volunteer-dashboard', label: 'Dashboard' },
+                { to: '/my-complaints', label: 'Manage Issues' },
+                { to: '/account', label: 'Account' },
+            ]
+            : [
+                { to: '/dashboard', label: 'Dashboard' },
+                { to: '/report-issue', label: 'Report Issue' },
+                { to: '/my-complaints', label: 'View Complaints' },
+                { to: '/account', label: 'Account' },
+            ];
 
     const handleLogout = () => {
         logout()
@@ -43,7 +49,8 @@ const Navbar = () => {
                     whileHover={{ scale: 1.05 }}
                     className="flex items-center gap-2 cursor-pointer"
                     onClick={() => {
-                        navigate(user?.role === 'volunteer' ? '/volunteer-dashboard' : '/dashboard')
+                        const target = user?.role === 'admin' ? '/admin/dashboard' : user?.role === 'volunteer' ? '/volunteer-dashboard' : '/dashboard';
+                        navigate(target)
                         setIsOpen(false)
                     }}
                 >
