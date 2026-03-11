@@ -1,4 +1,6 @@
 const Issue = require('../models/Issue');
+const User = require('../models/User');
+const Notification = require('../models/Notification');
 
 // POST /api/issues
 const createIssue = async (req, res) => {
@@ -29,6 +31,29 @@ const createIssue = async (req, res) => {
             urgency: urgency || 'Low',
             images
         });
+
+        // --- Notifications: new issue created ---
+        try {
+            // Notify all volunteers about the new issue
+            const volunteers = await User.find({ role: 'volunteer' }).select('_id');
+            const volunteerNotifs = volunteers.map(v => ({
+                recipient: v._id,
+                type: 'NEW_ISSUE',
+                message: `New issue reported: "${issue.title}" at ${issue.fullAddress}.`,
+                issueId: issue._id
+            }));
+            // Notify all admins
+            const admins = await User.find({ role: 'admin' }).select('_id');
+            const adminNotifs = admins.map(a => ({
+                recipient: a._id,
+                type: 'ADMIN_NEW_ISSUE',
+                message: `New issue created: "${issue.title}" (${issue.category}) at ${issue.fullAddress}.`,
+                issueId: issue._id
+            }));
+            await Notification.insertMany([...volunteerNotifs, ...adminNotifs]);
+        } catch (notifErr) {
+            console.error('Notification error on createIssue:', notifErr);
+        }
 
         res.status(201).json({ message: 'Issue submitted successfully', issue });
     } catch (err) {
@@ -105,10 +130,36 @@ const updateIssue = async (req, res) => {
             return res.status(403).json({ message: 'Unauthorized: Role not recognized.' });
         }
 
+        const oldStatus = issue.status;
         const updatedIssue = await Issue.findByIdAndUpdate(id, updateFields, { new: true })
             .populate('userId', 'name')
             .populate('assignedVolunteer', 'name volunteerId')
             .populate('assignedBy', 'name role');
+
+        // --- Notifications: status changed ---
+        if (updateFields.status && updateFields.status !== oldStatus) {
+            try {
+                const notifs = [];
+                // Notify the citizen who created the issue
+                notifs.push({
+                    recipient: updatedIssue.userId._id,
+                    type: 'STATUS_CHANGED',
+                    message: `Your issue "${updatedIssue.title}" status changed from "${oldStatus}" to "${updatedIssue.status}".`,
+                    issueId: updatedIssue._id
+                });
+                // Notify all admins
+                const admins = await User.find({ role: 'admin' }).select('_id');
+                admins.forEach(a => notifs.push({
+                    recipient: a._id,
+                    type: 'ADMIN_STATUS_UPDATE',
+                    message: `Issue "${updatedIssue.title}" status updated from "${oldStatus}" to "${updatedIssue.status}".`,
+                    issueId: updatedIssue._id
+                }));
+                await Notification.insertMany(notifs);
+            } catch (notifErr) {
+                console.error('Notification error on updateIssue:', notifErr);
+            }
+        }
 
         res.json({
             message: `Update successful. Status is: ${updatedIssue.status}`,
@@ -402,6 +453,34 @@ const acceptIssue = async (req, res) => {
             .populate('userId', 'name')
             .populate('assignedVolunteer', 'name volunteerId')
             .populate('assignedBy', 'name role');
+
+        // --- Notifications: volunteer accepted the issue ---
+        try {
+            const volunteer = await User.findById(req.userId).select('name');
+            const now = new Date();
+            const dateTimeStr = now.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+            const notifs = [
+                // Notify the citizen
+                {
+                    recipient: updatedIssue.userId._id,
+                    type: 'ISSUE_ACCEPTED',
+                    message: `Your issue "${updatedIssue.title}" has been accepted by volunteer ${volunteer?.name || 'Unknown'} on ${dateTimeStr}.`,
+                    issueId: updatedIssue._id
+                }
+            ];
+            // Notify all admins
+            const admins = await User.find({ role: 'admin' }).select('_id');
+            admins.forEach(a => notifs.push({
+                recipient: a._id,
+                type: 'ADMIN_STATUS_UPDATE',
+                message: `Issue "${updatedIssue.title}" was accepted by volunteer ${volunteer?.name || 'Unknown'} on ${dateTimeStr}.`,
+                issueId: updatedIssue._id
+            }));
+            await Notification.insertMany(notifs);
+        } catch (notifErr) {
+            console.error('Notification error on acceptIssue:', notifErr);
+        }
+
         res.json({ message: 'Issue accepted', issue: updatedIssue });
     } catch (err) {
         res.status(500).json({ message: 'Server error' });
@@ -429,6 +508,25 @@ const rejectIssue = async (req, res) => {
             .populate('userId', 'name')
             .populate('assignedVolunteer', 'name volunteerId')
             .populate('assignedBy', 'name role');
+
+        // --- Notification: Issue Rejected ---
+        try {
+            const volunteer = await User.findById(req.userId);
+            const dateStr = new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' });
+            const timeStr = new Date().toLocaleTimeString('en-IN', { 
+                timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' 
+            });
+
+            await Notification.create({
+                recipient: updatedIssue.userId._id, // notify the citizen
+                type: 'ISSUE_REJECTED',
+                message: `Your issue "${updatedIssue.title}" was dropped by volunteer ${volunteer?.name || 'Unknown'} on ${dateStr} at ${timeStr}.`,
+                issueId: updatedIssue._id
+            });
+        } catch (notifErr) {
+            console.error('Notification error on rejectIssue:', notifErr);
+        }
+
         res.json({ message: 'Issue rejected', issue: updatedIssue });
     } catch (err) {
         res.status(500).json({ message: 'Server error' });

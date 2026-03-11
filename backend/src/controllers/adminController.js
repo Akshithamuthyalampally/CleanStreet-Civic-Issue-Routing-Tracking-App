@@ -1,6 +1,7 @@
 const User = require('../models/User');
 const Issue = require('../models/Issue');
 const Activity = require('../models/Activity');
+const Notification = require('../models/Notification');
 
 // GET /api/admin/stats
 const getStats = async (req, res) => {
@@ -116,15 +117,25 @@ const getComplaints = async (req, res) => {
         if (location) query.fullAddress = new RegExp(location, 'i');
 
         console.log('Complaint Query:', query);
-        const complaints = await Issue.find(query).sort({ createdAt: -1 });
+        const complaints = await Issue.find(query)
+            .populate('userId', 'name email')
+            .populate('assignedVolunteer', 'name volunteerId email')
+            .populate('assignedBy', 'name role')
+            .sort({ createdAt: -1 })
+            .lean(); // Use lean for faster, plain JS objects
+
         console.log('Complaints found:', complaints.length);
 
         // Map fields for frontend consistency
         const mappedComplaints = complaints.map(c => ({
-            ...c._doc,
+            ...c,
             location: c.fullAddress,
             type: c.category,
-            assignedTo: c.assignedVolunteer
+            assignedTo: c.assignedVolunteer?._id || c.assignedVolunteer || null,
+            citizenName: c.userId?.name || 'Anonymous',
+            volunteerName: c.assignedVolunteer?.name || null,
+            assignedByRole: c.assignedBy?.role || null,
+            createdAt: c.createdAt // Ensure timestamp is preserved
         }));
 
         res.json(mappedComplaints);
@@ -183,6 +194,47 @@ const updateComplaint = async (req, res) => {
             .populate('userId', 'name')
             .populate('assignedVolunteer', 'name volunteerId')
             .populate('assignedBy', 'name role');
+
+        // --- Notifications ---
+        try {
+            const notifs = [];
+            const dateTimeStr = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+
+            if (assignedTo) {
+                // Notify the volunteer who was assigned
+                notifs.push({
+                    recipient: assignedTo,
+                    type: 'ISSUE_ASSIGNED',
+                    message: `Admin assigned you the issue "${updatedIssue.title}" at ${updatedIssue.fullAddress} on ${dateTimeStr}.`,
+                    issueId: updatedIssue._id
+                });
+                // Notify the citizen who created the issue
+                if (updatedIssue.userId) {
+                    notifs.push({
+                        recipient: updatedIssue.userId._id,
+                        type: 'STATUS_CHANGED',
+                        message: `A volunteer has been assigned to your issue "${updatedIssue.title}" by the admin on ${dateTimeStr}.`,
+                        issueId: updatedIssue._id
+                    });
+                }
+            }
+
+            if (status && issue.status !== oldStatus) {
+                // Notify the citizen
+                if (updatedIssue.userId) {
+                    notifs.push({
+                        recipient: updatedIssue.userId._id,
+                        type: 'STATUS_CHANGED',
+                        message: `Your issue "${updatedIssue.title}" status was updated from "${oldStatus}" to "${updatedIssue.status}" by admin on ${dateTimeStr}.`,
+                        issueId: updatedIssue._id
+                    });
+                }
+            }
+
+            if (notifs.length > 0) await Notification.insertMany(notifs);
+        } catch (notifErr) {
+            console.error('Notification error on admin updateComplaint:', notifErr);
+        }
 
         res.json({ message: 'Complaint updated', issue: updatedIssue });
     } catch (err) {

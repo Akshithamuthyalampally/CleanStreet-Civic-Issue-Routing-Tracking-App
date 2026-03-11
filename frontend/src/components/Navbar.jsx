@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
+import NotificationBell from './NotificationBell'
 
 const navItems = [
     { to: '/dashboard', label: 'Dashboard' },
@@ -87,6 +88,8 @@ const Navbar = () => {
                     ))}
 
                     <div className="flex items-center gap-2 ml-4 border-l pl-4" style={{ borderColor: 'var(--card-border)' }}>
+                        <NotificationBell />
+
                         <motion.button
                             whileHover={{ scale: 1.1 }}
                             whileTap={{ scale: 0.9 }}
@@ -110,6 +113,7 @@ const Navbar = () => {
 
                 {/* Mobile Menu Button */}
                 <div className="md:hidden flex items-center gap-4">
+                    <NotificationBell />
                     <motion.button
                         whileTap={{ scale: 0.9 }}
                         onClick={toggleTheme}

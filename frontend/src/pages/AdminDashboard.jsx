@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
     PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
@@ -11,6 +11,18 @@ import { jsPDF } from 'jspdf'
 import Papa from 'papaparse'
 import html2canvas from 'html2canvas'
 import PptxGenJS from 'pptxgenjs'
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
+import { Icon } from 'leaflet'
+
+const customMarkerIcon = new Icon({
+    iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+    iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [1, -34],
+    shadowSize: [41, 41]
+});
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316']
 
@@ -28,6 +40,7 @@ const AdminDashboard = () => {
     const [showDownloadDropdown, setShowDownloadDropdown] = useState(false)
     const [editingComplaintId, setEditingComplaintId] = useState(null)
     const [confirmingDeleteId, setConfirmingDeleteId] = useState(null)
+    const [isDownloading, setIsDownloading] = useState(false)
 
     useEffect(() => {
         fetchData()
@@ -73,15 +86,27 @@ const AdminDashboard = () => {
     }
 
     const downloadCSV = (data, filename) => {
-        const csv = Papa.unparse(data.map(c => ({
-            ID: c._id,
-            Title: c.title,
-            Status: c.status,
-            Category: c.category || c.type,
-            Location: c.fullAddress || c.location,
-            Urgency: c.urgency,
-            CreatedAt: new Date(c.createdAt).toLocaleString()
-        })))
+        const csv = Papa.unparse(data.map(c => {
+            const assignmentInfo = c.assignedByRole === 'admin'
+                ? 'Assigned by Admin'
+                : c.volunteerName
+                    ? `Accepted by ${c.volunteerName}`
+                    : 'Awaiting Action';
+
+            const d = c.createdAt ? new Date(c.createdAt) : null;
+            return {
+                ID: c._id,
+                Title: c.title,
+                Citizen: c.citizenName || 'N/A',
+                Status: c.status,
+                Assignment: assignmentInfo,
+                Category: c.category || c.type,
+                Location: c.fullAddress || c.location,
+                Urgency: c.urgency,
+                Date: d ? d.toISOString().split('T')[0] : 'N/A',
+                Time: d ? d.toLocaleTimeString('en-US', { hour12: false }) : 'N/A'
+            };
+        }))
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
         const link = document.createElement('a')
         const url = URL.createObjectURL(blob)
@@ -106,27 +131,121 @@ const AdminDashboard = () => {
         }
     }
 
-    const downloadPDF = () => {
-        const doc = new jsPDF()
-        doc.setFontSize(20)
-        doc.text('CleanStreet Civic Issue Report', 10, 10)
-        doc.setFontSize(12)
-        doc.text(`Generated on: ${new Date().toLocaleString()}`, 10, 20)
+    const downloadPDF = async () => {
+        setIsDownloading(true);
+        const originalTab = activeTab;
 
-        let y = 30
-        complaints.forEach((c, i) => {
-            if (y > 270) {
-                doc.addPage()
-                y = 20
+        if (activeTab !== 'Overview') {
+            setActiveTab('Overview');
+            // Wait for React to mount the charts and Recharts to animate
+            await new Promise(res => setTimeout(res, 800));
+        }
+
+        try {
+            const doc = new jsPDF();
+
+            // Title Page
+            doc.setFontSize(24);
+            doc.setTextColor(16, 185, 129); // civic-green
+            doc.text('CleanStreet Civic Issue Report', 105, 20, { align: 'center' });
+
+            doc.setFontSize(10);
+            doc.setTextColor(100);
+            doc.text(`Generated on: ${new Date().toLocaleString()}`, 105, 28, { align: 'center' });
+
+            doc.setFontSize(16);
+            doc.setTextColor(16, 185, 129);
+            doc.text('Detailed Issue List', 105, 40, { align: 'center' });
+            doc.line(10, 45, 200, 45);
+
+            let y = 55;
+            complaints.forEach((c, i) => {
+                if (y > 270) {
+                    doc.addPage();
+                    y = 20;
+                }
+
+                const assignmentInfo = c.assignedByRole === 'admin'
+                    ? 'Assigned by Admin'
+                    : c.volunteerName
+                        ? `Accepted by ${c.volunteerName}`
+                        : 'Awaiting Action';
+
+                doc.setFontSize(12);
+                doc.setTextColor(0);
+                doc.setFont(undefined, 'bold');
+                doc.text(`${i + 1}. ${c.title}`, 10, y);
+
+                doc.setFontSize(10);
+                doc.setFont(undefined, 'normal');
+                doc.setTextColor(80);
+
+                doc.text(`Citizen: ${c.citizenName || 'N/A'}`, 15, y + 6);
+                doc.text(`Status: ${c.status}`, 100, y + 6);
+
+                doc.text(`Assignment: ${assignmentInfo}`, 15, y + 11);
+                doc.text(`Category: ${c.category || c.type}`, 100, y + 11);
+
+                doc.text(`Location: ${c.fullAddress || c.location}`, 15, y + 16);
+
+                const postedDate = c.createdAt ? new Date(c.createdAt).toLocaleString() : 'N/A';
+                doc.text(`Posted on: ${postedDate}`, 15, y + 21);
+
+                doc.setDrawColor(240);
+                doc.line(15, y + 25, 195, y + 25);
+
+                y += 35;
+            });
+
+            // Capture Charts
+            doc.addPage();
+            doc.setFontSize(20);
+            doc.setTextColor(16, 185, 129);
+            doc.text('Statistics Overview', 105, 20, { align: 'center' });
+
+            const chartIds = ['chart-status', 'chart-category', 'chart-trends'];
+            let chartY = 35;
+
+            for (const id of chartIds) {
+                const el = document.getElementById(id);
+                if (el) {
+                    const canvas = await html2canvas(el, { scale: 2 });
+                    const aspect = canvas.height / canvas.width;
+
+                    // Ensure all 3 charts fit perfectly on one A4 page without stretching
+                    const maxHeight = 70;
+                    const maxWidth = 170;
+
+                    let targetWidth = maxWidth;
+                    let targetHeight = targetWidth * aspect;
+
+                    if (targetHeight > maxHeight) {
+                        targetHeight = maxHeight;
+                        targetWidth = targetHeight / aspect;
+                    }
+
+                    // Center the image (A4 width is 210mm)
+                    const xOffset = (210 - targetWidth) / 2;
+
+                    if (chartY + targetHeight > 280) {
+                        doc.addPage();
+                        chartY = 20;
+                    }
+
+                    const imgData = canvas.toDataURL('image/png');
+                    doc.addImage(imgData, 'PNG', xOffset, chartY, targetWidth, targetHeight);
+                    chartY += targetHeight + 15;
+                }
             }
-            doc.setFontSize(14)
-            doc.text(`${i + 1}. ${c.title}`, 10, y)
-            doc.setFontSize(10)
-            doc.text(`Status: ${c.status} | Category: ${c.category || c.type}`, 15, y + 5)
-            doc.text(`Location: ${c.fullAddress || c.location}`, 15, y + 10)
-            y += 20
-        })
-        doc.save('CleanStreet_Report.pdf')
+
+            doc.save(`CleanStreet_Report_${new Date().getTime()}.pdf`);
+        } finally {
+            if (originalTab !== 'Overview') {
+                setActiveTab(originalTab);
+            }
+            setIsDownloading(false);
+            setShowDownloadDropdown(false);
+        }
     }
 
     const downloadImage = async () => {
@@ -142,13 +261,86 @@ const AdminDashboard = () => {
 
     const downloadPPT = () => {
         const pptx = new PptxGenJS()
-        const slide = pptx.addSlide()
-        slide.addText('CleanStreet Civic Issue Report', { x: 1, y: 0.5, fontSize: 24, color: '363636' })
+        pptx.layout = 'LAYOUT_WIDE'
 
-        const rows = complaints.map(c => [c.title, c.status, c.category || c.type])
-        slide.addTable([['Title', 'Status', 'Category'], ...rows], { x: 0.5, y: 1.5, w: 9 })
+        // Title Slide
+        const titleSlide = pptx.addSlide()
+        titleSlide.background = { color: 'F1F5F9' }
+        titleSlide.addText('CleanStreet Civic Issue Report', {
+            x: 0, y: '40%', w: '100%', h: 1,
+            fontSize: 44, color: '10B981', align: 'center', bold: true
+        })
+        titleSlide.addText(`Visualizing Urban Progress - ${new Date().toLocaleDateString()}`, {
+            x: 0, y: '55%', w: '100%', h: 0.5,
+            fontSize: 20, color: '64748B', align: 'center'
+        })
 
-        pptx.writeFile({ fileName: 'CleanStreet_Report.pptx' })
+        // Status Chart Slide
+        if (stats?.statusDistribution) {
+            const chartSlide = pptx.addSlide();
+            chartSlide.addText('Complaint Status Distribution', { x: 0.5, y: 0.3, fontSize: 28, color: '334155', bold: true });
+            const chartData = [{
+                name: 'Status',
+                labels: stats.statusDistribution.map(d => String(d._id)),
+                values: stats.statusDistribution.map(d => d.count)
+            }];
+            chartSlide.addChart(pptx.ChartType.pie, chartData, { x: 0.5, y: 1.0, w: 12.3, h: 6 });
+        }
+
+        // Category Chart Slide
+        if (stats?.typeDistribution) {
+            const chartSlide = pptx.addSlide();
+            chartSlide.addText('Complaint Categories', { x: 0.5, y: 0.3, fontSize: 28, color: '334155', bold: true });
+            const chartData = [{
+                name: 'Categories',
+                labels: stats.typeDistribution.map(d => String(d._id)),
+                values: stats.typeDistribution.map(d => d.count)
+            }];
+            chartSlide.addChart(pptx.ChartType.bar, chartData, { x: 0.5, y: 1.0, w: 12.3, h: 6 });
+        }
+
+        // Trends Chart Slide
+        if (stats?.monthlyTrends) {
+            const chartSlide = pptx.addSlide();
+            chartSlide.addText('Monthly Trends', { x: 0.5, y: 0.3, fontSize: 28, color: '334155', bold: true });
+            const chartData = [{
+                name: 'Complaints',
+                labels: stats.monthlyTrends.map(d => `${d._id.month}/${d._id.year}`),
+                values: stats.monthlyTrends.map(d => d.count)
+            }];
+            chartSlide.addChart(pptx.ChartType.line, chartData, { x: 0.5, y: 1.0, w: 12.3, h: 6 });
+        }
+
+        // Summary Table Slide
+        const summarySlide = pptx.addSlide()
+        summarySlide.addText('Executive Summary of Inquiries', { x: 0.5, y: 0.3, fontSize: 28, color: '334155', bold: true })
+
+        const headers = ['Title', 'Citizen', 'Status', 'Assignment', 'Date'];
+        const rows = complaints.map(c => {
+            const assignmentInfo = c.assignedByRole === 'admin'
+                ? 'Admin Assigned'
+                : c.volunteerName
+                    ? `By: ${c.volunteerName}`
+                    : 'Awaiting';
+
+            return [
+                c.title,
+                c.citizenName || 'Anonymous',
+                c.status,
+                assignmentInfo,
+                c.createdAt ? new Date(c.createdAt).toLocaleDateString() : 'N/A'
+            ];
+        });
+
+        summarySlide.addTable([headers, ...rows], {
+            x: 0.5, y: 1.0, w: 12.3,
+            border: { color: 'E2E8F0' },
+            fill: { color: 'F8FAFC' },
+            fontSize: 10,
+            colW: [3.5, 2, 2, 3, 1.8]
+        })
+
+        pptx.writeFile({ fileName: `CleanStreet_Report_${new Date().getTime()}.pptx` })
     }
 
     if (loading && !stats) {
@@ -198,9 +390,10 @@ const AdminDashboard = () => {
                             whileHover={{ scale: 1.02 }}
                             whileTap={{ scale: 0.98 }}
                             onClick={() => setShowDownloadDropdown(!showDownloadDropdown)}
-                            className="px-6 py-3 bg-civic-green text-black rounded-2xl font-black shadow-lg shadow-civic-green/20 flex items-center gap-2 border border-civic-green/20"
+                            disabled={isDownloading}
+                            className="px-6 py-3 bg-civic-green text-black rounded-2xl font-black shadow-lg shadow-civic-green/20 flex items-center gap-2 border border-civic-green/20 disabled:opacity-50"
                         >
-                            <span>📥</span> Download Report
+                            <span>📥</span> {isDownloading ? 'Generating...' : 'Download Report'}
                             <motion.span
                                 animate={{ rotate: showDownloadDropdown ? 180 : 0 }}
                                 className="text-[10px]"
@@ -336,7 +529,7 @@ const AdminDashboard = () => {
 
                         {/* Distribution Charts */}
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                            <ChartCard title="Complaint Status Distribution" icon="🕒">
+                            <ChartCard id="chart-status" title="Complaint Status Distribution" icon="🕒">
                                 <PieChart>
                                     <Pie
                                         data={stats?.statusDistribution.map(d => ({ name: d._id, value: d.count })) || []}
@@ -352,7 +545,7 @@ const AdminDashboard = () => {
                                 </PieChart>
                             </ChartCard>
 
-                            <ChartCard title="Complaint Categories" icon="🏷️">
+                            <ChartCard id="chart-category" title="Complaint Categories" icon="🏷️">
                                 <PieChart>
                                     <Pie
                                         data={stats?.typeDistribution.map(d => ({ name: d._id, value: d.count })) || []}
@@ -384,7 +577,7 @@ const AdminDashboard = () => {
 
                         {/* Trends and Top Categories */}
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                            <ChartCard title="Monthly Complaint Trends (6 Months)" icon="📉" height={400}>
+                            <ChartCard id="chart-trends" title="Monthly Complaint Trends (6 Months)" icon="📉" height={400}>
                                 <AreaChart data={stats?.monthlyTrends.map(d => ({ name: `${d._id.month}/${d._id.year}`, count: d.count })) || []}>
                                     <defs>
                                         <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
@@ -413,6 +606,46 @@ const AdminDashboard = () => {
                                     <Bar dataKey="count" fill="#8b5cf6" radius={[0, 20, 20, 0]} barSize={40} />
                                 </BarChart>
                             </ChartCard>
+                        </div>
+
+                        {/* Geographic Distribution Map */}
+                        <div className="mt-8">
+                            <div className="bg-white dark:bg-zinc-900 p-8 rounded-[40px] shadow-sm border border-black/5 dark:border-white/5 overflow-hidden">
+                                <h3 className="text-xl font-black flex items-center gap-3 mb-6">
+                                    <span className="w-10 h-10 bg-civic-green/10 text-civic-green rounded-xl flex items-center justify-center">🗺️</span>
+                                    Geographic Incident Map
+                                </h3>
+                                <div className="h-[500px] w-full rounded-3xl overflow-hidden border border-black/10 dark:border-white/10 z-0 relative">
+                                    <MapContainer
+                                        center={[18.5204, 73.8567]} // India center roughly, or will pan
+                                        zoom={5}
+                                        className="w-full h-full z-0"
+                                    >
+                                        <TileLayer
+                                            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+                                            attribution='&copy; <a href="https://carto.com/">CartoDB</a>'
+                                        />
+                                        {complaints.filter(c => c.latitude != null && c.longitude != null && !isNaN(parseFloat(c.latitude)) && !isNaN(parseFloat(c.longitude))).map((issue) => (
+                                            <Marker
+                                                key={issue._id}
+                                                position={[parseFloat(issue.latitude), parseFloat(issue.longitude)]}
+                                                icon={customMarkerIcon}
+                                            >
+                                                <Popup className="rounded-xl">
+                                                    <div className="p-1 min-w-[200px]">
+                                                        <p className="font-bold text-sm mb-1 text-black">{issue.title}</p>
+                                                        <p className="text-xs text-zinc-500 mb-2">{issue.fullAddress || issue.location || 'Location Not Provided'}</p>
+                                                        <div className="pt-2 border-t border-black/5 flex justify-between items-center">
+                                                            <span className={`text-[10px] px-2 py-1 rounded-md font-bold uppercase tracking-wider ${issue.status === 'Resolved' ? 'bg-emerald-100 text-emerald-700' : issue.status === 'In Progress' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>{issue.status}</span>
+                                                            <span className="text-[10px] font-bold text-zinc-400">{new Date(issue.createdAt).toLocaleDateString()}</span>
+                                                        </div>
+                                                    </div>
+                                                </Popup>
+                                            </Marker>
+                                        ))}
+                                    </MapContainer>
+                                </div>
+                            </div>
                         </div>
                     </motion.div>
                 )}
@@ -540,7 +773,11 @@ const AdminDashboard = () => {
                                                 <td className="px-10 py-8">
                                                     <div className="min-w-0">
                                                         <p className="font-black text-lg truncate group-hover:text-amber-500 transition-colors">{complaint.title}</p>
-                                                        <p className="text-[10px] opacity-30 font-black uppercase tracking-tighter">Ref: {complaint._id.slice(-8)}</p>
+                                                        <div className="flex items-center gap-2 mt-0.5">
+                                                            <p className="text-[10px] opacity-30 font-black uppercase tracking-tighter">Ref: {complaint._id.slice(-8)}</p>
+                                                            <span className="w-1 h-1 rounded-full bg-zinc-300"></span>
+                                                            <p className="text-[10px] text-civic-green font-black uppercase tracking-tighter">By: {complaint.citizenName}</p>
+                                                        </div>
                                                     </div>
                                                 </td>
                                                 <td className="px-10 py-8 text-sm font-bold opacity-60">
@@ -588,11 +825,16 @@ const AdminDashboard = () => {
                                                             ))}
                                                         </select>
                                                     ) : (
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="w-2 h-2 rounded-full bg-civic-green shadow-neon"></span>
-                                                            <span className="text-sm font-black opacity-80">
-                                                                {users.find(u => u._id === (complaint.assignedTo || complaint.assignedVolunteer))?.name || 'Awaiting Acceptance'}
-                                                            </span>
+                                                        <div className="flex flex-col gap-0.5">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="w-2 h-2 rounded-full bg-civic-green shadow-neon"></span>
+                                                                <span className="text-sm font-black opacity-80">
+                                                                    {complaint.volunteerName || 'Awaiting Acceptance'}
+                                                                </span>
+                                                            </div>
+                                                            {complaint.assignedByRole === 'admin' && (
+                                                                <p className="text-[8px] font-black uppercase text-amber-500 ml-4 tracking-widest">Assigned by Admin</p>
+                                                            )}
                                                         </div>
                                                     )}
                                                 </td>
@@ -733,8 +975,8 @@ const AdminDashboard = () => {
     )
 }
 
-const ChartCard = ({ title, icon, children, height = 350 }) => (
-    <div className="bg-white dark:bg-zinc-900 p-10 rounded-[40px] shadow-sm border border-black/5 dark:border-white/5 flex flex-col">
+const ChartCard = ({ id, title, icon, children, height = 350 }) => (
+    <div id={id} className="bg-white dark:bg-zinc-900 p-10 rounded-[40px] shadow-sm border border-black/5 dark:border-white/5 flex flex-col">
         <h3 className="text-xl font-black mb-10 flex items-center gap-4">
             <span className="w-10 h-10 bg-zinc-100 dark:bg-zinc-800 rounded-xl flex items-center justify-center text-xl">{icon}</span>
             {title}
@@ -759,4 +1001,31 @@ const CustomTooltip = ({ active, payload, label }) => {
     return null
 }
 
-export default AdminDashboard
+class ErrorBoundary extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = { hasError: false, error: null };
+    }
+    static getDerivedStateFromError(error) {
+        return { hasError: true, error };
+    }
+    render() {
+        if (this.state.hasError) {
+            return (
+                <div className="p-10 bg-red-50 text-red-600 font-mono text-sm max-w-[1800px] mx-auto mt-10 rounded-3xl">
+                    <h1 className="text-2xl font-black mb-4 uppercase">React Crash Log</h1>
+                    <p className="whitespace-pre-wrap">{this.state.error?.stack || this.state.error?.message}</p>
+                </div>
+            )
+        }
+        return this.props.children;
+    }
+}
+
+export default function SafeAdminDashboard() {
+    return (
+        <ErrorBoundary>
+            <AdminDashboard />
+        </ErrorBoundary>
+    )
+}

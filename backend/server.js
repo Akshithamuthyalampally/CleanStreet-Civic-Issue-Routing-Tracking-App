@@ -8,6 +8,7 @@ const issueRoutes = require('./src/routes/issues');
 const cleanRoutes = require('./src/routes/clean');
 
 const adminRoutes = require('./src/routes/admin');
+const notificationRoutes = require('./src/routes/notifications');
 const path = require('path');
 const fs = require('fs');
 
@@ -27,6 +28,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/issues', issueRoutes);
 app.use('/api/clean', cleanRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 app.get('/api/version', (req, res) => res.json({ version: '1.2.0', status: 'Admin routes registered' }));
 

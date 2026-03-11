@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { motion, AnimatePresence } from 'framer-motion'
 import { AuthProvider } from './context/AuthContext'
 import { ThemeProvider, useTheme } from './context/ThemeContext'
+import { NotificationProvider } from './context/NotificationContext'
 import PrivateRoute from './components/PrivateRoute'
 import Navbar from './components/Navbar'
 import Login from './pages/Login'
@@ -15,6 +16,7 @@ import VolunteerDashboard from './pages/VolunteerDashboard'
 import AccountSettings from './pages/AccountSettings'
 import AdminLogin from './pages/AdminLogin'
 import AdminDashboard from './pages/AdminDashboard'
+import Notifications from './pages/Notifications'
 import Threads from './components/Threads'
 
 const PageTransition = ({ children }) => (
@@ -115,6 +117,15 @@ function AppContent() {
                 </PrivateRoute>
               }
             />
+            {/* Full-screen notifications page - no Layout wrapper */}
+            <Route
+              path="/notifications"
+              element={
+                <PrivateRoute>
+                  <Notifications />
+                </PrivateRoute>
+              }
+            />
             <Route path="/admin/login" element={<PageTransition><AdminLogin /></PageTransition>} />
             <Route
               path="/admin/dashboard"
@@ -137,7 +148,9 @@ function App() {
     <ThemeProvider>
       <AuthProvider>
         <BrowserRouter>
-          <AppContent />
+          <NotificationProvider>
+            <AppContent />
+          </NotificationProvider>
         </BrowserRouter>
       </AuthProvider>
     </ThemeProvider>
