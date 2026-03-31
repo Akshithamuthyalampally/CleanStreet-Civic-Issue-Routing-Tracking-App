@@ -1,0 +1,160 @@
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const User = require('../models/User');
+
+const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+
+// POST /api/auth/register
+const register = async (req, res) => {
+    try {
+        const { name, email, password, phone } = req.body;
+        if (!name || !email || !password) return res.status(400).json({ message: 'All fields required' });
+        if (!passwordRegex.test(password)) return res.status(400).json({ message: 'Password too weak' });
+
+        const exists = await User.findOne({ email });
+        if (exists) return res.status(409).json({ message: 'Email already registered' });
+
+        const hashed = await bcrypt.hash(password, 10);
+        const role = req.body.role || 'citizen';
+
+        let volunteerId = undefined;
+        let citizenId = undefined;
+
+        if (role === 'volunteer') {
+            const randomDigits = Math.floor(1000 + Math.random() * 9000);
+            volunteerId = `VOL-${randomDigits}`;
+            const idExists = await User.findOne({ volunteerId });
+            if (idExists) {
+                const newDigits = Math.floor(1000 + Math.random() * 9000);
+                volunteerId = `VOL-${newDigits}`;
+            }
+        } else if (role === 'citizen') {
+            const randomDigits = Math.floor(1000 + Math.random() * 9000);
+            citizenId = `CIT-${randomDigits}`;
+            const idExists = await User.findOne({ citizenId });
+            if (idExists) {
+                const newDigits = Math.floor(1000 + Math.random() * 9000);
+                citizenId = `CIT-${newDigits}`;
+            }
+        }
+
+        const user = await User.create({
+            name,
+            email,
+            password: hashed,
+            phone: phone || '',
+            role,
+            volunteerId,
+            citizenId
+        });
+        res.status(201).json({ message: 'Registration successful' });
+    } catch (err) {
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+// POST /api/auth/login
+const login = async (req, res) => {
+    try {
+        const { email, password, role } = req.body;
+        if (!email || !password || !role) {
+            return res.status(400).json({ message: 'Email, password, and role selection are required' });
+        }
+
+        const user = await User.findOne({ email });
+
+        if (!user) {
+            return res.status(401).json({ message: 'Invalid credentials' });
+        }
+
+        // Normalize input role for comparison
+        const requestedRoleNormalized = role.toLowerCase();
+
+        // Strict validation for Admins - only allow specific domains
+        if (requestedRoleNormalized === 'admin') {
+            const adminEmailRegex = /^[a-zA-Z0-9._%+-]+@(cleanstreet\.admin|admin\.admin)$/;
+            if (!adminEmailRegex.test(email)) {
+                return res.status(403).json({ message: 'Admin access requires a valid @cleanstreet.admin or @admin.admin email.' });
+            }
+        }
+
+        // Handle legacy 'user' role by migrating to 'citizen'
+        if (user.role === 'user' && requestedRoleNormalized === 'citizen') {
+            user.role = 'citizen';
+            await user.save();
+        }
+
+        if (user.role !== requestedRoleNormalized) {
+            return res.status(401).json({ message: `Access denied. Your account is registered as ${user.role}, not ${role}.` });
+        }
+
+        const match = await bcrypt.compare(password, user.password);
+        if (!match) {
+            return res.status(401).json({ message: 'Invalid credentials' });
+        }
+
+        const token = jwt.sign({ userId: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '7d' });
+        res.json({
+            token,
+            user: {
+                id: user._id,
+                name: user.name,
+                email: user.email,
+                phone: user.phone,
+                location: user.location,
+                role: user.role,
+                profilePicture: user.profilePicture,
+                volunteerId: user.volunteerId,
+                citizenId: user.citizenId
+            },
+        });
+    } catch (err) {
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+// PUT /api/auth/update-profile
+const updateProfile = async (req, res) => {
+    try {
+        const { name, email, location, profilePicture } = req.body;
+        const user = await User.findByIdAndUpdate(
+            req.userId,
+            { name, email, location, profilePicture },
+            { new: true, runValidators: true, select: '-password' }
+        );
+        res.json({ message: 'Profile updated', user });
+    } catch (err) {
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+// PUT /api/auth/change-password
+const changePassword = async (req, res) => {
+    try {
+        const { currentPassword, newPassword } = req.body;
+        if (!passwordRegex.test(newPassword)) return res.status(400).json({ message: 'New password too weak' });
+
+        const user = await User.findById(req.userId);
+        const match = await bcrypt.compare(currentPassword, user.password);
+        if (!match) return res.status(401).json({ message: 'Current password is incorrect' });
+
+        user.password = await bcrypt.hash(newPassword, 10);
+        await user.save();
+        res.json({ message: 'Password updated successfully' });
+    } catch (err) {
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+// POST /api/auth/logout
+const logout = async (req, res) => {
+    try {
+        // Since we use JWT, we just need to return success.
+        // Client will clear the token.
+        res.json({ message: 'Logged out successfully' });
+    } catch (err) {
+        res.status(500).json({ message: 'Server error during logout' });
+    }
+};
+
+module.exports = { register, login, updateProfile, changePassword, logout };

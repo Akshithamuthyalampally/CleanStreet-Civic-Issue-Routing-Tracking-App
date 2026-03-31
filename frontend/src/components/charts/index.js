@@ -1,0 +1,6 @@
+export { default as FunnelChart } from './FunnelChart'
+export { default as TreemapChart } from './TreemapChart'
+export { default as WaffleChart } from './WaffleChart'
+export { default as LollipopChart } from './LollipopChart'
+export { default as GaugeChart } from './GaugeChart'
+export { default as GradientAreaChart } from './GradientAreaChart'
