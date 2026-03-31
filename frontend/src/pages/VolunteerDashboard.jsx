@@ -211,6 +211,12 @@ const VolunteerDashboard = () => {
             <div className="mb-6 pt-4">
                 <BackButton />
             </div>
+            <div className="mb-6">
+                <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.6)]"></span>
+                    <p className="text-xs font-black uppercase tracking-widest opacity-60">Logged in as <span className="text-blue-500">{user?.role || 'Volunteer'}</span></p>
+                </div>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-12">
                 {[
                     { title: 'Pending', count: stats.pending, icon: '🕒', color: 'text-orange-500', bg: 'bg-orange-500/10' },
