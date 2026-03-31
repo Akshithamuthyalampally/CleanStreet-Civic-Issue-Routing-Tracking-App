@@ -16,6 +16,25 @@ const feedbackSchema = new mongoose.Schema({
     messages: { type: [feedbackMessageSchema], default: [] },
     // Innehåller userIds som har olästa nya meddelanden i tråden
     unreadFor: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User', default: [] }],
+    complaintId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Complaint",
+    },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+    volunteerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+    rating: {
+      type: Number,
+    },
+    serviceQuality: String,
+    responseTime: String,
+    professionalism: String,
+    comment: String,
 }, { timestamps: true });
 
 feedbackSchema.index({ recipients: 1, updatedAt: -1 });
@@ -23,4 +42,3 @@ feedbackSchema.index({ sender: 1, updatedAt: -1 });
 feedbackSchema.index({ unreadFor: 1 });
 
 module.exports = mongoose.model('Feedback', feedbackSchema);
-

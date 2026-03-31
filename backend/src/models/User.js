@@ -6,10 +6,16 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   phone: { type: String, default: '' },
   location: { type: String, default: '' },
-  role: { type: String, default: 'citizen' },
+  role: { 
+    type: String, 
+    enum: ['citizen', 'volunteer', 'admin', 'user'],
+    default: 'citizen' 
+  },
   volunteerId: { type: String, unique: true, sparse: true },
   citizenId: { type: String, unique: true, sparse: true },
   profilePicture: { type: String, default: '' },
+  profilePhoto: { type: String, default: '' },
 }, { timestamps: true });
 
 module.exports = mongoose.model('User', userSchema);
+
