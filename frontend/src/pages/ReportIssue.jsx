@@ -160,9 +160,7 @@ const ReportIssue = () => {
             });
             images.forEach(img => formData.append('images', img));
 
-            await api.post('/issues', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
+            await api.post('/issues', formData);
 
             setSuccess('Issue reported successfully. Community updated.');
             setForm({

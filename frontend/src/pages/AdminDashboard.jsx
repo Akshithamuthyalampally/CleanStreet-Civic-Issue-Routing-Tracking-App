@@ -92,26 +92,45 @@ const AdminDashboard = () => {
         }
     }
 
+    const prepareReportData = (c) => {
+        const assignmentInfo = c.assignedByRole === 'admin'
+            ? `Admin Assigned: ${c.volunteerName || 'Not Appointed'} (ID: ${c.volunteerId || 'Unk'})`
+            : c.volunteerName
+                ? `Accepted by Volunteer: ${c.volunteerName} (ID: ${c.volunteerId || 'Unk'})`
+                : 'Awaiting Volunteer Action';
+
+        const d = c.createdAt ? new Date(c.createdAt) : null;
+        const locationCombined = [c.fullAddress || c.location, c.landmark].filter(Boolean).join(' (Landmark: ') + (c.landmark ? ')' : '');
+
+        return {
+            ID: c._id || 'N/A',
+            Title: c.title || 'Untitled Issue',
+            Citizen: c.citizenName || 'Registered Citizen',
+            Status: c.status || 'Pending',
+            Assignment: assignmentInfo,
+            Category: c.category || c.type || 'General',
+            Location: locationCombined || 'Location Not Specified',
+            Urgency: c.urgency || 'Medium',
+            Date: d ? d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' }) : 'N/A',
+            Time: d ? d.toLocaleTimeString('en-GB') : 'N/A',
+            Timestamp: d ? d.toLocaleString('en-GB') : 'N/A'
+        };
+    }
+
     const downloadCSV = (data, filename) => {
         const csv = Papa.unparse(data.map(c => {
-            const assignmentInfo = c.assignedByRole === 'admin'
-                ? `Assigned by Admin - ${c.volunteerName || 'N/A'} (ID: ${c.volunteerId || 'N/A'})`
-                : c.volunteerName
-                    ? `Accepted by ${c.volunteerName} (ID: ${c.volunteerId || 'N/A'})`
-                    : 'Awaiting Action';
-
-            const d = c.createdAt ? new Date(c.createdAt) : null;
+            const report = prepareReportData(c);
             return {
-                ID: c._id,
-                Title: c.title,
-                Citizen: c.citizenName || 'N/A',
-                Status: c.status,
-                Assignment: assignmentInfo,
-                Category: c.category || c.type,
-                Location: c.fullAddress || c.location,
-                Urgency: c.urgency,
-                Date: d ? d.toISOString().split('T')[0] : 'N/A',
-                Time: d ? d.toLocaleTimeString('en-US', { hour12: false }) : 'N/A'
+                ID: report.ID,
+                Title: report.Title,
+                Citizen: report.Citizen,
+                Status: report.Status,
+                Assignment: report.Assignment,
+                Category: report.Category,
+                Location: report.Location,
+                Urgency: report.Urgency,
+                Date: report.Date,
+                Time: report.Time
             };
         }))
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
@@ -167,41 +186,40 @@ const AdminDashboard = () => {
 
             let y = 55;
             complaints.forEach((c, i) => {
-                if (y > 270) {
+                if (y > 260) {
                     doc.addPage();
                     y = 20;
                 }
 
-                const assignmentInfo = c.assignedByRole === 'admin'
-                    ? `Assigned by Admin - ${c.volunteerName || 'N/A'} (ID: ${c.volunteerId || 'N/A'})`
-                    : c.volunteerName
-                        ? `Accepted by ${c.volunteerName} (ID: ${c.volunteerId || 'N/A'})`
-                        : 'Awaiting Action';
+                const report = prepareReportData(c);
 
                 doc.setFontSize(12);
                 doc.setTextColor(0);
                 doc.setFont(undefined, 'bold');
-                doc.text(`${i + 1}. ${c.title}`, 10, y);
+                doc.text(`${i + 1}. ${report.Title}`, 10, y);
 
                 doc.setFontSize(10);
                 doc.setFont(undefined, 'normal');
                 doc.setTextColor(80);
 
-                doc.text(`Citizen: ${c.citizenName || 'N/A'}`, 15, y + 6);
-                doc.text(`Status: ${c.status}`, 100, y + 6);
+                doc.text(`Citizen: ${report.Citizen}`, 15, y + 6);
+                doc.text(`Status: ${report.Status}`, 110, y + 6); // Moved status right
 
-                doc.text(`Assignment: ${assignmentInfo}`, 15, y + 11);
-                doc.text(`Category: ${c.category || c.type}`, 100, y + 11);
+                doc.text(`Assignment:`, 15, y + 11);
+                doc.setTextColor(30);
+                doc.text(`${report.Assignment}`, 40, y + 11);
+                doc.setTextColor(80);
 
-                doc.text(`Location: ${c.fullAddress || c.location}`, 15, y + 16);
+                doc.text(`Category: ${report.Category}`, 15, y + 16); // Moved category below assignment to avoid collision
+                doc.text(`Urgency: ${report.Urgency}`, 110, y + 16);
 
-                const postedDate = c.createdAt ? new Date(c.createdAt).toLocaleString() : 'N/A';
-                doc.text(`Posted on: ${postedDate}`, 15, y + 21);
+                doc.text(`Location: ${report.Location}`, 15, y + 21);
+                doc.text(`Posted on: ${report.Timestamp}`, 15, y + 26);
 
                 doc.setDrawColor(240);
-                doc.line(15, y + 25, 195, y + 25);
+                doc.line(15, y + 30, 195, y + 30);
 
-                y += 35;
+                y += 40;
             });
 
             // Capture Charts
@@ -210,17 +228,28 @@ const AdminDashboard = () => {
             doc.setTextColor(16, 185, 129);
             doc.text('Statistics Overview', 105, 20, { align: 'center' });
 
-            const chartIds = ['chart-status', 'chart-category', 'chart-trends'];
+            const chartIds = [
+                'chart-status',
+                'chart-category',
+                'chart-user-roles',
+                'chart-trends',
+                'chart-last-7-days',
+                'chart-30-days-reg',
+                'chart-volunteer-resolutions'
+            ];
             let chartY = 35;
 
             for (const id of chartIds) {
                 const el = document.getElementById(id);
                 if (el) {
-                    const canvas = await html2canvas(el, { scale: 2 });
+                    const canvas = await html2canvas(el, {
+                        scale: 2,
+                        backgroundColor: '#ffffff', // Force white background for PDF clarity
+                        logging: false
+                    });
                     const aspect = canvas.height / canvas.width;
 
-                    // Ensure all 3 charts fit perfectly on one A4 page without stretching
-                    const maxHeight = 70;
+                    const maxHeight = 85;
                     const maxWidth = 170;
 
                     let targetWidth = maxWidth;
@@ -231,17 +260,17 @@ const AdminDashboard = () => {
                         targetWidth = targetHeight / aspect;
                     }
 
-                    // Center the image (A4 width is 210mm)
                     const xOffset = (210 - targetWidth) / 2;
 
-                    if (chartY + targetHeight > 280) {
+                    // Ensure enough space for the chart, otherwise start a new page
+                    if (chartY + targetHeight > 270) {
                         doc.addPage();
                         chartY = 20;
                     }
 
                     const imgData = canvas.toDataURL('image/png');
                     doc.addImage(imgData, 'PNG', xOffset, chartY, targetWidth, targetHeight);
-                    chartY += targetHeight + 15;
+                    chartY += targetHeight + 20;
                 }
             }
 
@@ -324,18 +353,13 @@ const AdminDashboard = () => {
 
         const headers = ['Title', 'Citizen', 'Status', 'Assignment', 'Date'];
         const rows = complaints.map(c => {
-            const assignmentInfo = c.assignedByRole === 'admin'
-                ? `Admin Assigned - ${c.volunteerName || 'N/A'} (ID: ${c.volunteerId || 'N/A'})`
-                : c.volunteerName
-                    ? `By: ${c.volunteerName} (ID: ${c.volunteerId || 'N/A'})`
-                    : 'Awaiting';
-
+            const report = prepareReportData(c);
             return [
-                c.title,
-                c.citizenName || 'Anonymous',
-                c.status,
-                assignmentInfo,
-                c.createdAt ? new Date(c.createdAt).toLocaleDateString() : 'N/A'
+                report.Title,
+                report.Citizen,
+                report.Status,
+                report.Assignment,
+                report.Date
             ];
         });
 
@@ -567,7 +591,7 @@ const AdminDashboard = () => {
                                 </PieChart>
                             </ChartCard>
 
-                            <ChartCard title="User Roles Breakup" icon="👤">
+                            <ChartCard id="chart-user-roles" title="User Roles Breakup" icon="👤">
                                 <PieChart>
                                     <Pie
                                         data={stats?.userRolesDistribution?.map(d => ({ name: d._id, value: d.count })) || []}
@@ -601,7 +625,7 @@ const AdminDashboard = () => {
                                 </AreaChart>
                             </ChartCard>
 
-                            <ChartCard title="Complaints — Last 7 Days" icon="📊" height={400}>
+                            <ChartCard id="chart-last-7-days" title="Complaints — Last 7 Days" icon="📊" height={400}>
                                 <div style={{ width: '65%', margin: '0 auto' }}>
                                     <BarChart data={complaintsLast7Days}>
                                         <CartesianGrid strokeDasharray="3 3" opacity={0.05} />
@@ -613,7 +637,7 @@ const AdminDashboard = () => {
                                 </div>
                             </ChartCard>
 
-                            <ChartCard title="Registrations — Last 30 Days" icon="📈" height={400}>
+                            <ChartCard id="chart-30-days-reg" title="Registrations — Last 30 Days" icon="📈" height={400}>
                                 <LineChart data={registrationsLast30Days}>
                                     <defs>
                                         <linearGradient id="colorReg" x1="0" y1="0" x2="0" y2="1">
@@ -629,7 +653,7 @@ const AdminDashboard = () => {
                                 </LineChart>
                             </ChartCard>
 
-                            <ChartCard title="Issues Resolved by Volunteers" icon="🛡️" height={400}>
+                            <ChartCard id="chart-volunteer-resolutions" title="Issues Resolved by Volunteers" icon="🛡️" height={400}>
                                 <AreaChart data={volunteerAnalytics?.volunteers.map(v => ({
                                     name: v.name.split(' ')[0],
                                     resolved: v.stats.completed

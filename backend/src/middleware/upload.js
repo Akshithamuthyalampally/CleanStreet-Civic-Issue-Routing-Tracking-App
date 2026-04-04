@@ -1,5 +1,5 @@
 const multer = require('multer');
-const CloudinaryStorage = require('multer-storage-cloudinary');
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const cloudinary = require('cloudinary').v2;
 
 // Cloudinary configuration
@@ -22,9 +22,9 @@ if (isCloudinaryConfigured) {
         cloudinary: cloudinary,
         params: {
             folder: 'civic_reports',
-            allowed_formats: ['jpg', 'png', 'jpeg', 'gif'],
-            public_id: (req, file) => Date.now() + '-' + file.originalname.split('.')[0],
-        },
+            allowed_formats: ['jpg', 'jpeg', 'png', 'gif'],
+            public_id: (req, file) => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+        }
     });
 } else {
     // Fallback to local storage

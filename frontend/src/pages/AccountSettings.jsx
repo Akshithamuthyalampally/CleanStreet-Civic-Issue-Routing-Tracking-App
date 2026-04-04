@@ -260,7 +260,7 @@ const AccountSettings = () => {
                                             </div>
                                         </div>
                                         <div>
-                                            <label className="label">Verification Code (Confirm)</label>
+                                            <label className="label">Confirm Access Key</label>
                                             <div className="relative">
                                                 <input type={showConfirm ? 'text' : 'password'} name="confirmPassword" value={security.confirmPassword} onChange={handleSecurityChange} className="input-field pr-12" placeholder="••••••••" />
                                                 <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="absolute right-4 top-1/2 -translate-y-1/2 opacity-40 hover:opacity-100 transition-all">{showConfirm ? '🙈' : '👁️'}</button>

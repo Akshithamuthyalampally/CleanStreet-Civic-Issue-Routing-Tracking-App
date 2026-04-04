@@ -6,6 +6,7 @@ const Feedback = require('../models/Feedback');
 // POST /api/issues
 const createIssue = async (req, res) => {
     try {
+        console.log('createIssue called - files:', req.files ? req.files.length : 0);
         const { title, description, category, fullAddress, landmark, latitude, longitude, urgency } = req.body;
 
         if (!title || !description || !category || !fullAddress || !latitude || !longitude) {
@@ -14,6 +15,7 @@ const createIssue = async (req, res) => {
 
         // Check if images are local or Cloudinary
         const images = req.files ? req.files.map(file => {
+            console.log('Processing file:', file.filename, 'Path:', file.path);
             if (file.path.startsWith('http')) return file.path;
             // Local fallback URL construction
             const baseUrl = `${req.protocol}://${req.get('host')}`;
